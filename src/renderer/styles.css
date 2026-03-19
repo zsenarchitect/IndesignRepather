@@ -318,6 +318,10 @@ p {
 }
 .analyze-row-ok { color: #888; }
 .analyze-row-broken { color: #f44336; }
+.analyze-row-broken:hover { background: #2a1a1a; }
+.broken-link-details { padding: 6px 0 4px 16px; }
+.broken-link-detail { font-size: 12px; color: #ccc; padding: 2px 0; display: flex; gap: 8px; align-items: baseline; }
+.broken-link-path { color: #666; font-size: 11px; word-break: break-all; }
 
 /* Version badges in file list */
 .version-badge {

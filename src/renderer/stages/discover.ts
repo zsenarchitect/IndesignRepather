@@ -105,12 +105,28 @@ export function init(container: HTMLElement) {
         if (broken.length === 0) {
           return `<div class="analyze-row analyze-row-ok">${docName} -- 0 broken links (all links OK)</div>`;
         }
-        return `<div class="analyze-row analyze-row-broken">${docName} -- ${broken.length} broken link${broken.length === 1 ? '' : 's'}</div>`;
+        const brokenPaths = broken.map((l: any) => l.filePath || l.name).join('\n');
+        const brokenDetails = broken.map((l: any) => {
+          const path = l.filePath || 'unknown path';
+          return `<div class="broken-link-detail">${l.name}<span class="broken-link-path">${path}</span></div>`;
+        }).join('');
+        return `<div class="analyze-row analyze-row-broken" title="${brokenPaths.replace(/"/g, '&quot;')}" style="cursor:pointer;" data-expandable>
+          ${docName} -- ${broken.length} broken link${broken.length === 1 ? '' : 's'}
+          <div class="broken-link-details hidden">${brokenDetails}</div>
+        </div>`;
       });
 
       analyzeStatusEl.textContent = `${totalBroken} broken link${totalBroken === 1 ? '' : 's'} across ${filesWithBroken} file${filesWithBroken === 1 ? '' : 's'}`;
 
       analyzeResultsEl.innerHTML = rows.join('');
+
+      // Click to expand/collapse broken link details
+      analyzeResultsEl.querySelectorAll('[data-expandable]').forEach((row) => {
+        row.addEventListener('click', () => {
+          const details = row.querySelector('.broken-link-details');
+          if (details) details.classList.toggle('hidden');
+        });
+      });
       analyzeResultsEl.classList.remove('hidden');
     } catch {
       analyzeStatusEl.textContent = 'Failed to analyze files. Is InDesign running?';
