@@ -9,6 +9,14 @@ export async function init(container: HTMLElement) {
   const files = getSelectedFiles();
   const mappings = getMappings();
 
+  // Confirm before executing destructive operation
+  const confirmed = confirm(`This will modify ${files.length} file(s). Proceed?`);
+  if (!confirmed) {
+    // Navigate back to preview
+    container.dispatchEvent(new CustomEvent('navigate-back', { bubbles: true }));
+    return;
+  }
+
   container.innerHTML = `
     <h2>Executing</h2>
     <p>Repathing links in your InDesign documents...</p>

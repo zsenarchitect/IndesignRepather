@@ -8,6 +8,12 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
+
+  // Validate path segments to prevent traversal attacks
+  if (!path.length || path.some(p => !p || p.includes('..') || p.startsWith('/'))) {
+    return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
+  }
+
   const githubUrl = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/${path.join('/')}`;
 
   const response = await fetch(githubUrl, {

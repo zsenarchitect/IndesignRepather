@@ -101,7 +101,7 @@ async function findInddFiles(dir: string): Promise<string[]> {
 
 // File selection ----------------------------------------------------------
 ipcMain.handle('select-files', async () => {
-  const result = await dialog.showOpenDialog({
+  const result = await dialog.showOpenDialog(mainWindow!, {
     title: 'Select InDesign Documents',
     filters: [{ name: 'InDesign Documents', extensions: ['indd'] }],
     properties: ['openFile', 'multiSelections'],
@@ -110,7 +110,7 @@ ipcMain.handle('select-files', async () => {
 });
 
 ipcMain.handle('select-folder', async () => {
-  const result = await dialog.showOpenDialog({
+  const result = await dialog.showOpenDialog(mainWindow!, {
     title: 'Select Folder Containing InDesign Documents',
     properties: ['openDirectory'],
   });
@@ -127,13 +127,21 @@ ipcMain.handle('select-folder-path', async () => {
 
 // InDesign COM ------------------------------------------------------------
 ipcMain.handle('get-open-documents', () => {
-  com.connect();
-  return com.getOpenDocuments();
+  try {
+    com.connect();
+    return { data: com.getOpenDocuments() };
+  } catch (e: any) {
+    return { error: String(e.message || e) };
+  }
 });
 
 ipcMain.handle('analyze-links', (_event, filePaths: string[]) => {
-  com.connect();
-  return filePaths.map((fp) => com.getDocumentLinks(fp));
+  try {
+    com.connect();
+    return { data: filePaths.map((fp) => com.getDocumentLinks(fp)) };
+  } catch (e: any) {
+    return { error: String(e.message || e) };
+  }
 });
 
 // Discover ----------------------------------------------------------------
@@ -157,28 +165,37 @@ ipcMain.handle(
 ipcMain.handle(
   'preview-repath',
   async (_event, filePaths: string[], mappings: Mapping[]) => {
-    com.connect();
-    const documents = filePaths.map((fp) => com.getDocumentLinks(fp));
-    const previewed = previewRepath(documents, mappings);
-    return checkNewPathsExist(previewed);
+    try {
+      com.connect();
+      const documents = filePaths.map((fp) => com.getDocumentLinks(fp));
+      const previewed = previewRepath(documents, mappings);
+      return { data: checkNewPathsExist(previewed) };
+    } catch (e: any) {
+      return { error: String(e.message || e) };
+    }
   }
 );
 
 ipcMain.handle(
   'execute-repath',
   async (_event, filePaths: string[], mappings: Mapping[]) => {
-    com.connect();
-    const results = await executeRepath(filePaths, mappings, (update) => {
-      mainWindow?.webContents.send('repath-progress', update);
-      // Update taskbar progress
-      if (mainWindow && update.totalFiles > 0) {
-        const progress = (update.currentFileIndex + 1) / update.totalFiles;
-        mainWindow.setProgressBar(progress);
-      }
-    });
-    // Clear taskbar progress when done
-    mainWindow?.setProgressBar(-1);
-    return results;
+    try {
+      com.connect();
+      const results = await executeRepath(filePaths, mappings, (update) => {
+        mainWindow?.webContents.send('repath-progress', update);
+        // Update taskbar progress
+        if (mainWindow && update.totalFiles > 0) {
+          const progress = (update.currentFileIndex + 1) / update.totalFiles;
+          mainWindow.setProgressBar(progress);
+        }
+      });
+      // Clear taskbar progress when done
+      mainWindow?.setProgressBar(-1);
+      return { data: results };
+    } catch (e: any) {
+      mainWindow?.setProgressBar(-1);
+      return { error: String(e.message || e) };
+    }
   }
 );
 
@@ -215,8 +232,9 @@ app.whenReady().then(() => {
   autoUpdater.checkForUpdatesAndNotify();
 
   autoUpdater.on('update-downloaded', () => {
+    if (!mainWindow) return;
     dialog
-      .showMessageBox(mainWindow!, {
+      .showMessageBox(mainWindow, {
         type: 'info',
         title: 'Update Ready',
         message: 'A new version has been downloaded. Restart to apply the update.',

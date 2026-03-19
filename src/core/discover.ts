@@ -14,8 +14,12 @@ async function walkDir(
   fileIndex: Map<string, string[]>,
   targetNames: Set<string>,
   onProgress?: (found: number) => void,
-  scanned = { count: 0 }
+  scanned = { count: 0 },
+  depth = 0,
+  maxDepth = 15
 ): Promise<void> {
+  if (depth >= maxDepth) return;
+
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -28,7 +32,7 @@ async function walkDir(
     if (entry.isDirectory()) {
       // Skip hidden directories and common non-content directories
       if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
-      await walkDir(fullPath, fileIndex, targetNames, onProgress, scanned);
+      await walkDir(fullPath, fileIndex, targetNames, onProgress, scanned, depth + 1, maxDepth);
     } else if (targetNames.has(entry.name.toLowerCase())) {
       const existing = fileIndex.get(entry.name.toLowerCase()) ?? [];
       existing.push(fullPath);

@@ -13,8 +13,13 @@ export function init(container: HTMLElement) {
     </div>
 
     <div style="margin:16px 0;">
-      <button id="btn-scan" disabled>Scan for Mappings</button>
-      <span id="scan-status" style="margin-left:12px;font-size:13px;color:#888;"></span>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button id="btn-scan" disabled>Scan for Mappings</button>
+        <button id="btn-cancel-scan" class="hidden" style="font-size:12px;">Cancel</button>
+        <span id="scan-status" style="font-size:13px;color:#888;"></span>
+      </div>
+      <div class="progress-bar hidden" id="scan-progress-bar"><div class="progress-fill" id="scan-progress-fill" style="width:0%"></div></div>
+      <div id="scan-file-count" class="hidden" style="font-size:12px;color:#666;margin-top:4px;"></div>
     </div>
 
     <div id="discover-results" class="hidden"></div>
@@ -25,8 +30,13 @@ export function init(container: HTMLElement) {
 
   const rootsListEl = container.querySelector('#search-roots-list') as HTMLElement;
   const scanBtn = container.querySelector('#btn-scan') as HTMLButtonElement;
+  const cancelBtn = container.querySelector('#btn-cancel-scan') as HTMLButtonElement;
   const scanStatus = container.querySelector('#scan-status') as HTMLElement;
+  const progressBar = container.querySelector('#scan-progress-bar') as HTMLElement;
+  const progressFill = container.querySelector('#scan-progress-fill') as HTMLElement;
+  const fileCountEl = container.querySelector('#scan-file-count') as HTMLElement;
   const resultsEl = container.querySelector('#discover-results') as HTMLElement;
+  let scanCancelled = false;
 
   function renderRoots() {
     if (searchRoots.length === 0) {
@@ -75,9 +85,25 @@ export function init(container: HTMLElement) {
     }
   });
 
+  // Cancel scan
+  cancelBtn.addEventListener('click', () => {
+    scanCancelled = true;
+    cancelBtn.classList.add('hidden');
+    scanStatus.textContent = 'Cancelled.';
+    progressBar.classList.add('hidden');
+    fileCountEl.classList.add('hidden');
+    scanBtn.disabled = false;
+  });
+
   // Scan
   scanBtn.addEventListener('click', async () => {
     scanBtn.disabled = true;
+    scanCancelled = false;
+    cancelBtn.classList.remove('hidden');
+    progressBar.classList.remove('hidden');
+    progressFill.style.width = '0%';
+    fileCountEl.classList.remove('hidden');
+    fileCountEl.textContent = '0 files scanned';
     scanStatus.textContent = 'Scanning...';
     resultsEl.classList.add('hidden');
 
@@ -96,22 +122,37 @@ export function init(container: HTMLElement) {
     } catch {
       scanStatus.textContent = 'Failed to analyze files. Is InDesign running?';
       scanBtn.disabled = false;
+      cancelBtn.classList.add('hidden');
+      progressBar.classList.add('hidden');
+      fileCountEl.classList.add('hidden');
       return;
     }
 
     if (brokenLinks.length === 0) {
       scanStatus.textContent = 'No broken links found — nothing to discover.';
       scanBtn.disabled = false;
+      cancelBtn.classList.add('hidden');
+      progressBar.classList.add('hidden');
+      fileCountEl.classList.add('hidden');
       return;
     }
 
     // Listen for progress
     window.api.onDiscoverProgress((data) => {
+      if (scanCancelled) return;
       scanStatus.textContent = `Scanning... ${data.found} file${data.found === 1 ? '' : 's'} found`;
+      fileCountEl.textContent = `${data.found} files scanned`;
+      // Pulse the progress bar since we don't know total
+      progressFill.style.width = '100%';
+      progressFill.style.opacity = '0.5';
     });
 
     try {
       const result = await window.api.discoverMappings(brokenLinks, searchRoots);
+      cancelBtn.classList.add('hidden');
+      progressBar.classList.add('hidden');
+      fileCountEl.classList.add('hidden');
+      if (scanCancelled) return;
       suggestedMappings = result.suggestedMappings;
       scanStatus.textContent = `Done. Scanned ${result.totalScanned} files, found ${suggestedMappings.length} mapping${suggestedMappings.length === 1 ? '' : 's'}.`;
 
@@ -124,6 +165,9 @@ export function init(container: HTMLElement) {
       }
     } catch {
       scanStatus.textContent = 'Scan failed.';
+      cancelBtn.classList.add('hidden');
+      progressBar.classList.add('hidden');
+      fileCountEl.classList.add('hidden');
     }
     scanBtn.disabled = false;
   });

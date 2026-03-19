@@ -6,8 +6,16 @@ contextBridge.exposeInMainWorld('api', {
   selectFolder: () => ipcRenderer.invoke('select-folder'),
 
   // InDesign COM
-  getOpenDocuments: () => ipcRenderer.invoke('get-open-documents'),
-  analyzeLinks: (filePaths: string[]) => ipcRenderer.invoke('analyze-links', filePaths),
+  getOpenDocuments: async () => {
+    const result = await ipcRenderer.invoke('get-open-documents');
+    if (result?.error) throw new Error(result.error);
+    return result?.data ?? result;
+  },
+  analyzeLinks: async (filePaths: string[]) => {
+    const result = await ipcRenderer.invoke('analyze-links', filePaths);
+    if (result?.error) throw new Error(result.error);
+    return result?.data ?? result;
+  },
 
   // Discover
   discoverMappings: (brokenLinks: { name: string; filePath: string }[], searchRoots: string[]) =>
@@ -16,10 +24,16 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('discover-progress', (_event, data) => callback(data)),
 
   // Preview & Execute
-  previewRepath: (filePaths: string[], mappings: { oldPath: string; newPath: string }[]) =>
-    ipcRenderer.invoke('preview-repath', filePaths, mappings),
-  executeRepath: (filePaths: string[], mappings: { oldPath: string; newPath: string }[]) =>
-    ipcRenderer.invoke('execute-repath', filePaths, mappings),
+  previewRepath: async (filePaths: string[], mappings: { oldPath: string; newPath: string }[]) => {
+    const result = await ipcRenderer.invoke('preview-repath', filePaths, mappings);
+    if (result?.error) throw new Error(result.error);
+    return result?.data ?? result;
+  },
+  executeRepath: async (filePaths: string[], mappings: { oldPath: string; newPath: string }[]) => {
+    const result = await ipcRenderer.invoke('execute-repath', filePaths, mappings);
+    if (result?.error) throw new Error(result.error);
+    return result?.data ?? result;
+  },
   onProgress: (callback: (data: any) => void) =>
     ipcRenderer.on('repath-progress', (_event, data) => callback(data)),
 

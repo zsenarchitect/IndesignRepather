@@ -233,5 +233,12 @@ document.addEventListener('reset-session', () => {
   showStage(1);
 });
 
+// Listen for navigate-back from execute stage cancel
+document.addEventListener('navigate-back', () => {
+  if (currentStage > 1) {
+    showStage(currentStage - 1);
+  }
+});
+
 // Start at stage 1
 showStage(1);

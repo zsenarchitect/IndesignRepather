@@ -22,7 +22,7 @@ function renderFileList(container: HTMLElement, files: string[]) {
 export function init(container: HTMLElement) {
   container.innerHTML = `
     <h2>Select InDesign Documents</h2>
-    <p>Choose how to select your .indd files</p>
+    <p>Select the InDesign documents with broken links. The app will help you update link paths to their new locations.</p>
 
     <div class="file-options">
       <div class="file-option" id="opt-pick-files">
@@ -40,12 +40,35 @@ export function init(container: HTMLElement) {
     </div>
 
     <div class="file-list"></div>
+    <div id="link-summary" style="margin-top:12px;font-size:13px;color:#888;"></div>
   `;
+
+  const summaryEl = container.querySelector('#link-summary') as HTMLElement;
+
+  async function showLinkSummary(files: string[]) {
+    if (files.length === 0) {
+      summaryEl.textContent = '';
+      return;
+    }
+    summaryEl.textContent = 'Analyzing links...';
+    try {
+      const docs = await window.api.analyzeLinks(files);
+      const totalLinks = docs.reduce((sum: number, d: any) => sum + d.links.length, 0);
+      const brokenLinks = docs.reduce(
+        (sum: number, d: any) => sum + d.links.filter((l: any) => l.status === 'missing').length,
+        0
+      );
+      summaryEl.textContent = `${files.length} file${files.length === 1 ? '' : 's'}, ${totalLinks} link${totalLinks === 1 ? '' : 's'} (${brokenLinks} broken)`;
+    } catch {
+      summaryEl.textContent = 'Could not analyze links. Is InDesign running?';
+    }
+  }
 
   // Restore existing selection
   const existing = getSelectedFiles();
   if (existing.length > 0) {
     renderFileList(container, existing);
+    showLinkSummary(existing);
   }
 
   // Pick individual files
@@ -54,6 +77,7 @@ export function init(container: HTMLElement) {
     if (files.length > 0) {
       setSelectedFiles(files);
       renderFileList(container, files);
+      showLinkSummary(files);
     }
   });
 
@@ -63,6 +87,7 @@ export function init(container: HTMLElement) {
     if (files.length > 0) {
       setSelectedFiles(files);
       renderFileList(container, files);
+      showLinkSummary(files);
     }
   });
 
@@ -74,6 +99,7 @@ export function init(container: HTMLElement) {
         const files = docs.map((d) => d.path);
         setSelectedFiles(files);
         renderFileList(container, files);
+        showLinkSummary(files);
       } else {
         renderFileList(container, []);
         const listEl = container.querySelector('.file-list') as HTMLElement;
