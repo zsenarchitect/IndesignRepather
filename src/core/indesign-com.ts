@@ -91,14 +91,29 @@ export async function connect(_version?: string): Promise<{ version: string; bri
   const progId = 'InDesign.Application';
 
   const script = `
+    $app = $null
+    # Method 1: GetActiveObject (works if InDesign registered in ROT)
     try {
-      # Attach to already-running InDesign — never launch a new instance
       $app = [System.Runtime.InteropServices.Marshal]::GetActiveObject('${progId}')
+    } catch {}
+
+    # Method 2: New-Object attaches to running instance if one exists
+    # (InDesign 2026+ may not register in ROT but New-Object still connects)
+    if (-not $app) {
+      try {
+        $app = New-Object -ComObject '${progId}'
+      } catch {
+        Write-Error 'InDesign is not running. Please launch InDesign first.'
+        exit 1
+      }
+    }
+
+    try {
       $app.ScriptPreferences.UserInteractionLevel = 1852403060
       $ver = $app.Version
       @{ version = "$ver"; progId = "${progId}" } | ConvertTo-Json
     } catch {
-      Write-Error 'InDesign is not running. Please launch InDesign first.'
+      Write-Error "Connected but failed to read version: $($_.Exception.Message)"
       exit 1
     }
   `;
