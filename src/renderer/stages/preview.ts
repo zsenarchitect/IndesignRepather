@@ -1,5 +1,6 @@
 import { getSelectedFiles, getMappings, setPreviewResults, getPreviewResults } from '../app';
 import type { DocumentInfo, LinkInfo } from '../../shared/types';
+import { createProgressBar } from '../components/progress';
 
 function basename(filePath: string): string {
   return filePath.replace(/\\/g, '/').split('/').pop() || filePath;
@@ -12,23 +13,49 @@ export async function init(container: HTMLElement) {
   container.innerHTML = `
     <h2>Preview</h2>
     <p>Reviewing link changes before execution...</p>
-    <div id="preview-loading" style="color:#888;font-size:13px;">Loading preview...</div>
+    <div id="preview-loading-section"></div>
     <div id="preview-content" class="hidden"></div>
   `;
 
-  const loadingEl = container.querySelector('#preview-loading') as HTMLElement;
+  const loadingSection = container.querySelector('#preview-loading-section') as HTMLElement;
   const contentEl = container.querySelector('#preview-content') as HTMLElement;
+
+  const previewProgress = createProgressBar();
+  loadingSection.appendChild(previewProgress.element);
+
+  if (files.length > 1) {
+    previewProgress.update(0, `Loading preview... (0 of ${files.length} files)`);
+  } else {
+    previewProgress.setIndeterminate('Loading preview...');
+  }
+
+  // Listen for per-file preview progress
+  let previewProgressListenerAttached = false;
+  let previewProgressCallback: ((data: { currentIndex: number; totalFiles: number; currentFile: string }) => void) | null = null;
+  previewProgressCallback = (data) => {
+    const pct = Math.round(((data.currentIndex + 1) / data.totalFiles) * 100);
+    const fileName = data.currentFile.replace(/\\/g, '/').split('/').pop() || data.currentFile;
+    previewProgress.update(pct, `Loading preview... file ${data.currentIndex + 1} of ${data.totalFiles}: ${fileName}`);
+  };
+  if (!previewProgressListenerAttached) {
+    previewProgressListenerAttached = true;
+    window.api.onPreviewProgress((data) => {
+      previewProgressCallback?.(data);
+    });
+  }
 
   let results: DocumentInfo[];
   try {
     results = await window.api.previewRepath(files, mappings);
     setPreviewResults(results);
   } catch {
-    loadingEl.textContent = 'Failed to generate preview. Is InDesign running?';
+    previewProgress.hide();
+    loadingSection.innerHTML = '<div style="color:#888;font-size:13px;">Failed to generate preview. Is InDesign running?</div>';
     return;
   }
 
-  loadingEl.classList.add('hidden');
+  previewProgressCallback = null;
+  previewProgress.hide();
   contentEl.classList.remove('hidden');
 
   // Compute summary

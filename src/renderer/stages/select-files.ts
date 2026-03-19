@@ -1,5 +1,6 @@
 import { setSelectedFiles, getSelectedFiles, setFileVersions, getFileVersions, setConnectedInDesignVersion, getConnectedInDesignVersion } from '../app';
 import type { InddVersionInfo } from '../../core/indd-version';
+import { createProgressBar } from '../components/progress';
 
 function basename(filePath: string): string {
   return filePath.replace(/\\/g, '/').split('/').pop() || filePath;
@@ -159,13 +160,40 @@ export function init(container: HTMLElement) {
     <div id="link-summary" style="margin-top:12px;font-size:13px;color:#888;"></div>
   `;
 
+  // -- Progress bars --
+  const connectProgress = createProgressBar();
+  const scanProgress = createProgressBar();
+  const versionProgress = createProgressBar();
+
+  // Insert connect progress after connection controls
+  const connControls = container.querySelector('.connection-controls');
+  if (connControls) connControls.after(connectProgress.element);
+
+  // Insert scan & version progress before file list
+  const fileListEl = container.querySelector('.file-list') as HTMLElement;
+  fileListEl.before(versionProgress.element);
+  fileListEl.before(scanProgress.element);
+
+  // Listen for folder scan progress from main process
+  let folderScanListenerAttached = false;
+  let folderScanCallback: ((data: { found: number }) => void) | null = null;
+  if (!folderScanListenerAttached) {
+    folderScanListenerAttached = true;
+    window.api.onFolderScanProgress((data) => {
+      folderScanCallback?.(data);
+    });
+  }
+
   async function detectAndShowVersions(files: string[]) {
     try {
+      versionProgress.setIndeterminate(`Detecting file versions... (${files.length} file${files.length === 1 ? '' : 's'})`);
       const result = await window.api.detectFileVersions(files);
+      versionProgress.hide();
       setFileVersions(result.data);
       renderFileList(container, files, result.data);
       renderVersionWarning(container);
     } catch {
+      versionProgress.hide();
       // Version detection is best-effort
     }
   }
@@ -214,10 +242,12 @@ export function init(container: HTMLElement) {
   connectBtn.addEventListener('click', async () => {
     const version = versionSelect.value || undefined;
     setConnStatus('connecting', 'Connecting...');
+    connectProgress.setIndeterminate('Connecting to InDesign...');
     connectBtn.disabled = true;
 
     const result = await window.api.connectInDesign(version);
     if (result.data) {
+      connectProgress.hide();
       setConnStatus('connected', `Connected (InDesign ${result.data.version})`);
       setConnectedInDesignVersion(result.data.version);
       renderVersionWarning(container);
@@ -229,13 +259,16 @@ export function init(container: HTMLElement) {
 
       if (isNotRunning) {
         setConnStatus('none', 'Not running. Launching...');
+        connectProgress.setIndeterminate('Launching InDesign...');
         const launchResult = await window.api.launchInDesign();
         if (launchResult.error) {
+          connectProgress.hide();
           setConnStatus('none', launchResult.error);
           connectBtn.disabled = false;
           return;
         }
         // Retry connection after launch
+        connectProgress.setIndeterminate('Connecting after launch...');
         const retry = await window.api.connectInDesign(version);
         if (retry.data) {
           setConnStatus('connected', `Connected (InDesign ${retry.data.version})`);
@@ -247,6 +280,7 @@ export function init(container: HTMLElement) {
       } else {
         setConnStatus('none', result.error);
       }
+      connectProgress.hide();
       connectBtn.disabled = false;
     }
   });
@@ -280,8 +314,14 @@ export function init(container: HTMLElement) {
 
   // Pick folder
   container.querySelector('#opt-pick-folder')?.addEventListener('click', async () => {
-    summaryEl.textContent = 'Scanning folder for .indd files...';
+    summaryEl.textContent = '';
+    scanProgress.setIndeterminate('Scanning folder for .indd files...');
+    folderScanCallback = (data) => {
+      scanProgress.setIndeterminate(`Scanning... ${data.found} file${data.found === 1 ? '' : 's'} found`);
+    };
     const files = await window.api.selectFolder();
+    folderScanCallback = null;
+    scanProgress.hide();
     if (files.length > 0) {
       await handleFilesSelected(files);
     } else {

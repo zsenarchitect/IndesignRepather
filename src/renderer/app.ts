@@ -28,6 +28,8 @@ declare global {
       getOpenDocuments: () => Promise<{ name: string; path: string }[]>;
       analyzeLinks: (filePaths: string[]) => Promise<DocumentInfo[]>;
       onAnalyzeProgress: (callback: (data: { currentFile: string; currentIndex: number; totalFiles: number }) => void) => void;
+      onFolderScanProgress: (callback: (data: { found: number }) => void) => void;
+      onPreviewProgress: (callback: (data: { currentIndex: number; totalFiles: number; currentFile: string }) => void) => void;
       discoverMappings: (
         brokenLinks: { name: string; filePath: string }[],
         searchRoots: string[]

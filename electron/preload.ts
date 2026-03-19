@@ -59,6 +59,14 @@ contextBridge.exposeInMainWorld('api', {
   onAnalyzeProgress: (callback: (data: any) => void) =>
     ipcRenderer.on('analyze-progress', (_event, data) => callback(data)),
 
+  // Folder scan progress
+  onFolderScanProgress: (callback: (data: { found: number }) => void) =>
+    ipcRenderer.on('folder-scan-progress', (_event, data) => callback(data)),
+
+  // Preview progress
+  onPreviewProgress: (callback: (data: { currentIndex: number; totalFiles: number; currentFile: string }) => void) =>
+    ipcRenderer.on('preview-progress', (_event, data) => callback(data)),
+
   // File version detection
   detectFileVersions: (filePaths: string[]) => ipcRenderer.invoke('detect-file-versions', filePaths),
 

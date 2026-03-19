@@ -79,7 +79,7 @@ function createWindow() {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-async function findInddFiles(dir: string): Promise<string[]> {
+async function findInddFiles(dir: string, onProgress?: (found: number) => void): Promise<string[]> {
   const results: string[] = [];
 
   async function walk(d: string) {
@@ -96,6 +96,7 @@ async function findInddFiles(dir: string): Promise<string[]> {
         await walk(full);
       } else if (entry.name.toLowerCase().endsWith('.indd')) {
         results.push(full);
+        onProgress?.(results.length);
       }
     }
   }
@@ -124,7 +125,9 @@ ipcMain.handle('select-folder', async () => {
     properties: ['openDirectory'],
   });
   if (result.canceled || result.filePaths.length === 0) return [];
-  return findInddFiles(result.filePaths[0]);
+  return findInddFiles(result.filePaths[0], (found) => {
+    mainWindow?.webContents.send('folder-scan-progress', { found });
+  });
 });
 
 ipcMain.handle('select-folder-path', async () => {
@@ -211,8 +214,13 @@ ipcMain.handle(
   async (_event, filePaths: string[], mappings: Mapping[]) => {
     try {
       const documents = [];
-      for (const fp of filePaths) {
-        documents.push(await com.getDocumentLinks(fp));
+      for (let i = 0; i < filePaths.length; i++) {
+        mainWindow?.webContents.send('preview-progress', {
+          currentIndex: i,
+          totalFiles: filePaths.length,
+          currentFile: filePaths[i],
+        });
+        documents.push(await com.getDocumentLinks(filePaths[i]));
       }
       const previewed = previewRepath(documents, mappings);
       return { data: await checkNewPathsExist(previewed) };
