@@ -1,0 +1,30 @@
+import { NextRequest, NextResponse } from 'next/server';
+
+const GITHUB_OWNER = 'ennead-llp';
+const GITHUB_REPO = 'InDesignRepather';
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ path: string[] }> }
+) {
+  const { path } = await params;
+  const githubUrl = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/${path.join('/')}`;
+
+  const response = await fetch(githubUrl, {
+    headers: {
+      Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+      Accept: 'application/octet-stream',
+    },
+  });
+
+  if (!response.ok) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
+  return new NextResponse(response.body, {
+    headers: {
+      'Content-Type': response.headers.get('Content-Type') || 'application/octet-stream',
+      'Content-Disposition': response.headers.get('Content-Disposition') || '',
+    },
+  });
+}
