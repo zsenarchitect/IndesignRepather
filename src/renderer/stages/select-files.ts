@@ -25,15 +25,15 @@ export function init(container: HTMLElement) {
     <p>Select the InDesign documents with broken links. The app will help you update link paths to their new locations.</p>
 
     <div class="file-options">
-      <div class="file-option" id="opt-pick-files">
+      <div class="file-option" id="opt-pick-files" tabindex="0" role="button">
         <h3>Pick Documents</h3>
         <p>Select individual .indd files</p>
       </div>
-      <div class="file-option" id="opt-pick-folder">
+      <div class="file-option" id="opt-pick-folder" tabindex="0" role="button">
         <h3>Pick Folder</h3>
-        <p>Recursively find .indd files in a folder</p>
+        <p>Find all .indd files in a folder and subfolders</p>
       </div>
-      <div class="file-option" id="opt-open-docs">
+      <div class="file-option" id="opt-open-docs" tabindex="0" role="button">
         <h3>Open in InDesign</h3>
         <p>Grab currently open documents</p>
       </div>
@@ -70,6 +70,17 @@ export function init(container: HTMLElement) {
     renderFileList(container, existing);
     showLinkSummary(existing);
   }
+
+  // Keyboard activation for file option cards
+  container.querySelectorAll('.file-option').forEach((card) => {
+    card.addEventListener('keydown', (e) => {
+      const key = (e as KeyboardEvent).key;
+      if (key === 'Enter' || key === ' ') {
+        e.preventDefault();
+        (card as HTMLElement).click();
+      }
+    });
+  });
 
   // Pick individual files
   container.querySelector('#opt-pick-files')?.addEventListener('click', async () => {

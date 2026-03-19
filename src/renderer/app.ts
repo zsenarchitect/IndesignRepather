@@ -41,6 +41,8 @@ declare global {
       saveSearchRoots: (roots: string[]) => Promise<void>;
       onProgress: (callback: (data: ProgressUpdate) => void) => void;
       onDiscoverProgress: (callback: (data: { found: number }) => void) => void;
+      exportRules: (data: string) => Promise<void>;
+      importRules: () => Promise<string | null>;
       getAppVersion: () => Promise<string>;
       getThumbnail: (filePath: string) => Promise<string | null>;
     };
@@ -110,7 +112,7 @@ function showStage(stage: number) {
       nextBtn.disabled = selectedFiles.length === 0;
       break;
     case 2:
-      nextBtn.textContent = 'Skip / Next';
+      nextBtn.textContent = 'Next';
       nextBtn.classList.remove('primary', 'hidden');
       nextBtn.disabled = false;
       break;

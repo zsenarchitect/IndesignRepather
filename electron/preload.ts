@@ -47,6 +47,10 @@ contextBridge.exposeInMainWorld('api', {
   // Folder path (returns directory path, not .indd files)
   selectFolderPath: () => ipcRenderer.invoke('select-folder-path'),
 
+  // Export/Import rules
+  exportRules: (data: string) => ipcRenderer.invoke('export-rules', data),
+  importRules: () => ipcRenderer.invoke('import-rules'),
+
   // Utilities
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getThumbnail: (filePath: string) => ipcRenderer.invoke('get-thumbnail', filePath),

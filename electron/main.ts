@@ -36,7 +36,15 @@ const store = new Store<{
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow() {
-  const saved = store.get('windowBounds');
+  const rawSaved = store.get('windowBounds');
+  const saved =
+    rawSaved &&
+    rawSaved.width >= 400 &&
+    rawSaved.height >= 300 &&
+    rawSaved.width <= 4000 &&
+    rawSaved.height <= 3000
+      ? rawSaved
+      : null;
 
   mainWindow = new BrowserWindow({
     width: saved?.width ?? 960,
@@ -208,6 +216,28 @@ ipcMain.handle('save-mappings', (_event, mappings: Mapping[]) => {
 ipcMain.handle('load-search-roots', () => store.get('searchRoots'));
 ipcMain.handle('save-search-roots', (_event, roots: string[]) => {
   store.set('searchRoots', roots);
+});
+
+// Export/Import rules -----------------------------------------------------
+ipcMain.handle('export-rules', async (_event, data: string) => {
+  const result = await dialog.showSaveDialog(mainWindow!, {
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+    defaultPath: 'indesign-repather-rules.json',
+  });
+  if (!result.canceled && result.filePath) {
+    const { writeFile } = await import('fs/promises');
+    await writeFile(result.filePath, data, 'utf-8');
+  }
+});
+
+ipcMain.handle('import-rules', async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+    properties: ['openFile'],
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+  const { readFile } = await import('fs/promises');
+  return readFile(result.filePaths[0], 'utf-8');
 });
 
 // Utilities ---------------------------------------------------------------

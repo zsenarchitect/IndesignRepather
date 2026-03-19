@@ -249,3 +249,12 @@ p {
   font-size: 13px;
   color: #999;
 }
+
+/* Save indicator */
+.save-indicator { color: #4caf50; font-size: 12px; opacity: 1; transition: opacity 0.5s; }
+.save-indicator.fade { opacity: 0; }
+
+/* Per-file result table */
+.file-breakdown { width: 100%; border-collapse: collapse; margin-top: 12px; }
+.file-breakdown th { text-align: left; padding: 6px 8px; color: #888; font-size: 12px; border-bottom: 1px solid #333; }
+.file-breakdown td { padding: 4px 8px; border-bottom: 1px solid #222; font-size: 13px; }

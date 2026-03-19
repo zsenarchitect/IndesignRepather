@@ -157,6 +157,25 @@ export async function init(container: HTMLElement) {
         <span class="status-missing">${totalFailed} failed</span>
         <span>${totalErrors} error${totalErrors === 1 ? '' : 's'}</span>
       </div>
+
+      <table class="file-breakdown">
+        <thead>
+          <tr><th>File</th><th>Repathed</th><th>Failed</th></tr>
+        </thead>
+        <tbody>
+          ${results
+            .map(
+              (r) =>
+                `<tr>
+                  <td title="${r.document}">${basename(r.document)}</td>
+                  <td class="status-ok">${r.repathedLinks}</td>
+                  <td class="${r.failedLinks > 0 ? 'status-missing' : ''}">${r.failedLinks}</td>
+                </tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>
+
       ${
         totalErrors > 0
           ? `<div style="margin-top:12px;font-size:12px;color:#f44336;">${results

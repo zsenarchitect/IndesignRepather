@@ -53,13 +53,13 @@ export async function init(container: HTMLElement) {
     <div class="summary-bar">
       <span>${willRepath} will repath</span>
       <span class="status-ok">${exist} exist</span>
-      <span class="status-missing">${missing} missing</span>
+      <span class="status-missing" title="The new path doesn't exist on disk yet">${missing} new path not found</span>
       <span class="status-skip">${skipped} skipped</span>
     </div>
     <div id="preview-filters" style="margin:8px 0;display:flex;gap:8px;">
       <button class="filter-btn active" data-filter="all" style="font-size:12px;padding:4px 12px;">All</button>
       <button class="filter-btn" data-filter="repathed" style="font-size:12px;padding:4px 12px;">Repathed</button>
-      <button class="filter-btn" data-filter="missing" style="font-size:12px;padding:4px 12px;">Missing</button>
+      <button class="filter-btn" data-filter="missing" style="font-size:12px;padding:4px 12px;">New Path Not Found</button>
       <button class="filter-btn" data-filter="skipped" style="font-size:12px;padding:4px 12px;">Skipped</button>
     </div>
     <div id="preview-groups"></div>
@@ -176,6 +176,7 @@ function renderLinkRow(link: LinkInfo, mappings: import('../../shared/types').Ma
       statusIcon = '&#10007;';
       statusClass = 'status-missing';
       filterType = 'missing';
+      // Title attribute is added on the status cell below
     }
     pathChange = `
       <div style="font-size:12px;color:#888;word-break:break-all;">${escapeHtml(link.filePath)}</div>
@@ -209,7 +210,7 @@ function renderLinkRow(link: LinkInfo, mappings: import('../../shared/types').Ma
       <td style="font-size:13px;">${escapeHtml(link.name)}</td>
       <td>${pathChange}</td>
       <td>${matchedRule || '<span style="color:#666;font-size:11px;">&mdash;</span>'}</td>
-      <td class="${statusClass}" style="text-align:center;font-size:16px;">${statusIcon}</td>
+      <td class="${statusClass}" style="text-align:center;font-size:16px;" ${filterType === 'missing' ? 'title="The new path doesn\'t exist on disk yet"' : ''}>${statusIcon}</td>
     </tr>
   `;
 }

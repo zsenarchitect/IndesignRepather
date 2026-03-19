@@ -1,6 +1,9 @@
 import { getSelectedFiles, getMappings, setMappings } from '../app';
 import type { Mapping } from '../../shared/types';
 
+let discoverListenerAttached = false;
+let discoverProgressCallback: ((data: { found: number }) => void) | null = null;
+
 export function init(container: HTMLElement) {
   container.innerHTML = `
     <h2>Discover Mappings</h2>
@@ -137,15 +140,21 @@ export function init(container: HTMLElement) {
       return;
     }
 
-    // Listen for progress
-    window.api.onDiscoverProgress((data) => {
+    // Listen for progress (only attach once to avoid accumulation)
+    discoverProgressCallback = (data) => {
       if (scanCancelled) return;
       scanStatus.textContent = `Scanning... ${data.found} file${data.found === 1 ? '' : 's'} found`;
       fileCountEl.textContent = `${data.found} files scanned`;
       // Pulse the progress bar since we don't know total
       progressFill.style.width = '100%';
       progressFill.style.opacity = '0.5';
-    });
+    };
+    if (!discoverListenerAttached) {
+      discoverListenerAttached = true;
+      window.api.onDiscoverProgress((data) => {
+        discoverProgressCallback?.(data);
+      });
+    }
 
     try {
       const result = await window.api.discoverMappings(brokenLinks, searchRoots);
