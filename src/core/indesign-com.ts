@@ -23,28 +23,40 @@ let connectedProgId: string | null = null;
 
 /**
  * Execute a PowerShell script and return parsed JSON output.
+ * Uses temp file + -File flag to avoid command-line escaping issues.
  */
 async function runPS(script: string): Promise<any> {
-  const { stdout, stderr } = await execFileAsync('powershell.exe', [
-    '-NoProfile',
-    '-NonInteractive',
-    '-ExecutionPolicy', 'Bypass',
-    '-Command', script,
-  ], {
-    timeout: 60000,
-    maxBuffer: 10 * 1024 * 1024, // 10MB for large link lists
-    windowsHide: true,
-  });
+  const { writeFile, unlink } = await import('fs/promises');
+  const { tmpdir } = await import('os');
+  const { join: joinPath } = await import('path');
+  const tmpFile = joinPath(tmpdir(), `indesign-repather-${Date.now()}-${Math.random().toString(36).slice(2)}.ps1`);
 
-  if (!stdout.trim()) {
-    if (stderr.trim()) throw new Error(stderr.trim());
-    return null;
-  }
+  await writeFile(tmpFile, script, 'utf-8');
 
   try {
-    return JSON.parse(stdout);
-  } catch {
-    throw new Error(stdout.trim() || stderr.trim() || 'Unknown PowerShell error');
+    const { stdout, stderr } = await execFileAsync('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy', 'Bypass',
+      '-File', tmpFile,
+    ], {
+      timeout: 60000,
+      maxBuffer: 10 * 1024 * 1024,
+      windowsHide: true,
+    });
+
+    if (!stdout.trim()) {
+      if (stderr.trim()) throw new Error(stderr.trim());
+      return null;
+    }
+
+    try {
+      return JSON.parse(stdout);
+    } catch {
+      throw new Error(stdout.trim() || stderr.trim() || 'Unknown PowerShell error');
+    }
+  } finally {
+    unlink(tmpFile).catch(() => {});
   }
 }
 
@@ -85,60 +97,50 @@ export function checkVersionCompatibility(
  * Sets UserInteractionLevel to neverInteract immediately after creating COM object.
  */
 export async function connect(_version?: string): Promise<{ version: string; bridge: string }> {
-  // Try version-specific ProgIDs newest first, then generic fallback.
-  // Registry confirms both InDesign.Application.2026 and .2025 exist.
+  // Now using temp file, so proper multi-line PowerShell is safe
   const script = `
-    $app = $null
-    $usedProgId = ''
+$progIds = @(
+    "InDesign.Application.2026",
+    "InDesign.Application.2025",
+    "InDesign.Application.2024",
+    "InDesign.Application.2023",
+    "InDesign.Application"
+)
 
-    # Scan registry for all InDesign.Application.YYYY ProgIDs, try newest first
-    $progIds = @()
+$app = $null
+$usedProgId = ""
+
+foreach ($p in $progIds) {
     try {
-      $progIds = Get-ChildItem 'HKLM:\\SOFTWARE\\Classes' -ErrorAction SilentlyContinue |
-        Where-Object { $_.PSChildName -match '^InDesign\\.Application\\.\\d{4}$' } |
-        ForEach-Object { $_.PSChildName } |
-        Sort-Object -Descending
-    } catch {}
-
-    # Add generic fallback
-    $progIds += 'InDesign.Application'
-
-    foreach ($progId in $progIds) {
-      # Try GetActiveObject first (attaches to running instance)
-      try {
-        $app = [System.Runtime.InteropServices.Marshal]::GetActiveObject($progId)
-        $usedProgId = $progId
+        $app = [System.Runtime.InteropServices.Marshal]::GetActiveObject($p)
+        $usedProgId = $p
         break
-      } catch {}
-    }
+    } catch {}
+}
 
-    if (-not $app) {
-      # Try New-Object with newest ProgID (connects to running or creates)
-      foreach ($progId in $progIds) {
+if (-not $app) {
+    foreach ($p in $progIds) {
         try {
-          $app = New-Object -ComObject $progId
-          if ($app -and $app.Version) {
-            $usedProgId = $progId
-            break
-          }
+            $test = New-Object -ComObject $p
+            $v = $test.Version
+            if ($v) {
+                $app = $test
+                $usedProgId = $p
+                break
+            }
         } catch {}
-      }
     }
+}
 
-    if (-not $app) {
-      Write-Error 'InDesign is not running. Please launch InDesign first.'
-      exit 1
-    }
+if (-not $app) {
+    Write-Error "InDesign is not running. Please launch InDesign first."
+    exit 1
+}
 
-    try {
-      $app.ScriptPreferences.UserInteractionLevel = 1852403060
-      $ver = $app.Version
-      @{ version = "$ver"; progId = $usedProgId } | ConvertTo-Json
-    } catch {
-      Write-Error "Connected but failed to read version: $($_.Exception.Message)"
-      exit 1
-    }
-  `;
+$app.ScriptPreferences.UserInteractionLevel = 1852403060
+$ver = $app.Version
+@{ version = "$ver"; progId = $usedProgId } | ConvertTo-Json
+`;
 
   const result = await runPS(script);
   connectedVersion = result.version;
