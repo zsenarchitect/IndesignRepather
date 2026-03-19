@@ -9,6 +9,7 @@ files:
 forceCodeSigning: false
 win:
   target: nsis
+  icon: assets/icon.svg
   signAndEditExecutable: false
 nsis:
   oneClick: true
@@ -16,5 +17,4 @@ nsis:
   allowToChangeInstallationDirectory: false
 asar: true
 publish:
-  provider: generic
-  url: https://enneadtab.com/indesign-repather/releases
+  provider: github

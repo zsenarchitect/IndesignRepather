@@ -1,12 +1,19 @@
 import { app, BrowserWindow, ipcMain, dialog, nativeImage } from 'electron';
 import { join } from 'path';
 import { readdir } from 'fs/promises';
+import * as Sentry from '@sentry/electron/main';
+import { autoUpdater } from 'electron-updater';
 import Store from 'electron-store';
 import * as com from '../src/core/indesign-com';
 import { previewRepath, checkNewPathsExist } from '../src/core/link-analyzer';
 import { executeRepath } from '../src/core/repather';
 import { discoverMappings } from '../src/core/discover';
 import type { Mapping } from '../src/shared/types';
+
+// ---------------------------------------------------------------------------
+// Sentry error reporting
+// ---------------------------------------------------------------------------
+Sentry.init({ dsn: process.env.SENTRY_DSN || '' });
 
 // ---------------------------------------------------------------------------
 // Persistent settings
@@ -36,6 +43,7 @@ function createWindow() {
     height: saved?.height ?? 700,
     x: saved?.x,
     y: saved?.y,
+    icon: join(__dirname, '../../assets/icon.svg'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -200,7 +208,25 @@ ipcMain.handle('get-thumbnail', async (_event, filePath: string) => {
 // ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+
+  // Auto-updater
+  autoUpdater.checkForUpdatesAndNotify();
+
+  autoUpdater.on('update-downloaded', () => {
+    dialog
+      .showMessageBox(mainWindow!, {
+        type: 'info',
+        title: 'Update Ready',
+        message: 'A new version has been downloaded. Restart to apply the update.',
+        buttons: ['Restart', 'Later'],
+      })
+      .then((result) => {
+        if (result.response === 0) autoUpdater.quitAndInstall();
+      });
+  });
+});
 
 app.on('window-all-closed', () => {
   app.quit();

@@ -1,4 +1,15 @@
 import type { Mapping, DocumentInfo, RepathResult, ProgressUpdate } from '../shared/types';
+
+// ---------------------------------------------------------------------------
+// Global error handlers (Sentry main process captures renderer errors too,
+// but these ensure nothing slips through silently)
+// ---------------------------------------------------------------------------
+window.addEventListener('error', (event) => {
+  console.error('Unhandled error:', event.error);
+});
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('Unhandled rejection:', event.reason);
+});
 import { init as initSelectFiles } from './stages/select-files';
 import { init as initDiscover } from './stages/discover';
 import { init as initDefineRules } from './stages/define-rules';

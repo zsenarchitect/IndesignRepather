@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Two chain links being reconnected — monochrome white on transparent -->
+  <g fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Left link (complete oval) -->
+    <rect x="36" y="80" width="80" height="96" rx="40" ry="48"/>
+    <!-- Right link (complete oval) -->
+    <rect x="140" y="80" width="80" height="96" rx="40" ry="48"/>
+    <!-- Overlap region — connecting bar top -->
+    <line x1="116" y1="104" x2="140" y2="104"/>
+    <!-- Connecting bar bottom -->
+    <line x1="116" y1="152" x2="140" y2="152"/>
+    <!-- Repair spark/arrow — small chevron indicating reconnection -->
+    <polyline points="120,128 132,118 132,138" stroke-width="8"/>
+  </g>
+</svg>
