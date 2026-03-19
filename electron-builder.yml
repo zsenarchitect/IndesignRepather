@@ -4,6 +4,7 @@ directories:
   output: release
 files:
   - dist/**/*
+  - src/core/dismiss-dialogs.ps1
   - "!node_modules/.cache/**"
   - "!docs/**"
 forceCodeSigning: false

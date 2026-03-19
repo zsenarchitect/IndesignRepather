@@ -143,8 +143,13 @@ ipcMain.handle('select-folder-path', async () => {
 });
 
 // InDesign COM ------------------------------------------------------------
+ipcMain.handle('dismiss-dialogs', async () => {
+  return { dismissed: await com.dismissDialogs() };
+});
+
 ipcMain.handle('connect-indesign', async (_event, version?: string) => {
   try {
+    await com.dismissDialogs();
     const result = await com.connect(version);
     return { data: result };
   } catch (e: any) {
@@ -188,6 +193,7 @@ ipcMain.handle('launch-indesign', async () => {
 
 ipcMain.handle('get-open-documents', async () => {
   try {
+    await com.dismissDialogs();
     return { data: await com.getOpenDocuments() };
   } catch (e: any) {
     return { error: String(e.message || e) };
@@ -196,6 +202,7 @@ ipcMain.handle('get-open-documents', async () => {
 
 ipcMain.handle('analyze-links', async (_event, filePaths: string[]) => {
   try {
+    await com.dismissDialogs();
     const results = [];
     for (let i = 0; i < filePaths.length; i++) {
       mainWindow?.webContents.send('analyze-progress', {

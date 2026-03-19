@@ -21,6 +21,27 @@ const execFileAsync = promisify(execFile);
 let connectedVersion: string | null = null;
 let connectedProgId: string | null = null;
 
+// Path to dismiss-dialogs script (bundled with app)
+import { join as joinPath, dirname } from 'path';
+const dismissScriptPath = joinPath(dirname(__filename), 'dismiss-dialogs.ps1');
+
+/**
+ * Dismiss any InDesign dialog windows (Missing Fonts, Convert File, etc.)
+ * Uses Win32 API to find and click OK/Cancel/Close on popup dialogs.
+ */
+export async function dismissDialogs(): Promise<number> {
+  try {
+    const { stdout } = await execFileAsync('powershell.exe', [
+      '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+      '-File', dismissScriptPath,
+    ], { timeout: 10000, windowsHide: true });
+    const result = JSON.parse(stdout.trim());
+    return result.dismissed || 0;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * Execute a PowerShell script and return parsed JSON output.
  * Uses temp file + -File flag to avoid command-line escaping issues.
