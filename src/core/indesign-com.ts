@@ -92,19 +92,13 @@ export async function connect(_version?: string): Promise<{ version: string; bri
 
   const script = `
     try {
-      $app = New-Object -ComObject '${progId}'
+      # Attach to already-running InDesign — never launch a new instance
+      $app = [System.Runtime.InteropServices.Marshal]::GetActiveObject('${progId}')
       $app.ScriptPreferences.UserInteractionLevel = 1852403060
       $ver = $app.Version
       @{ version = "$ver"; progId = "${progId}" } | ConvertTo-Json
     } catch {
-      $msg = $_.Exception.Message
-      if ($msg -match 'CLSID|Class not registered') {
-        Write-Error 'InDesign is not installed or COM is not registered'
-      } elseif ($msg -match 'Operation unavailable|not running|Cannot create') {
-        Write-Error 'InDesign is not running. Please launch InDesign first.'
-      } else {
-        Write-Error "Failed to connect: $msg"
-      }
+      Write-Error 'InDesign is not running. Please launch InDesign first.'
       exit 1
     }
   `;
