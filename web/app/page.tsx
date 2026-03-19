@@ -1,6 +1,6 @@
 export default function Home() {
   const RELEASE_URL =
-    'https://github.com/ennead-llp/InDesignRepather/releases/latest';
+    'https://github.com/zsenarchitect/IndesignRepather/releases/latest';
 
   return (
     <>

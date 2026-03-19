@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const GITHUB_OWNER = 'ennead-llp';
-const GITHUB_REPO = 'InDesignRepather';
+const GITHUB_OWNER = 'zsenarchitect';
+const GITHUB_REPO = 'IndesignRepather';
 
 export async function GET(
   request: NextRequest,
