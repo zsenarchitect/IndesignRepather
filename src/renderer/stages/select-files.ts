@@ -1,10 +1,11 @@
-import { setSelectedFiles, getSelectedFiles } from '../app';
+import { setSelectedFiles, getSelectedFiles, setFileVersions, getFileVersions, setConnectedInDesignVersion, getConnectedInDesignVersion } from '../app';
+import type { InddVersionInfo } from '../../core/indd-version';
 
 function basename(filePath: string): string {
   return filePath.replace(/\\/g, '/').split('/').pop() || filePath;
 }
 
-function renderFileList(container: HTMLElement, files: string[]) {
+function renderFileList(container: HTMLElement, files: string[], versions?: Record<string, InddVersionInfo | null>) {
   const listEl = container.querySelector('.file-list') as HTMLElement;
   if (!listEl) return;
 
@@ -13,10 +14,110 @@ function renderFileList(container: HTMLElement, files: string[]) {
     return;
   }
 
+  const fileRows = files.map((f) => {
+    const ver = versions?.[f];
+    const versionLabel = ver
+      ? `<span style="color:#888;font-size:12px;margin-left:auto;white-space:nowrap;">InDesign ${ver.yearVersion} (v${ver.version})</span>`
+      : '';
+    return `<div class="file-item" style="display:flex;align-items:center;gap:8px;">${basename(f)}${versionLabel}</div>`;
+  }).join('');
+
+  // Show version span summary if versions detected
+  let versionSummary = '';
+  if (versions) {
+    const years = new Set<string>();
+    for (const f of files) {
+      const ver = versions[f];
+      if (ver) years.add(ver.yearVersion);
+    }
+    if (years.size > 1) {
+      const sorted = Array.from(years).sort();
+      versionSummary = `<div style="font-size:12px;color:#ffc107;margin-top:6px;">Files span versions: ${sorted.join(', ')}</div>`;
+    }
+  }
+
   listEl.innerHTML = `
     <div style="font-size:12px;color:#888;margin-bottom:6px;">${files.length} file${files.length === 1 ? '' : 's'} selected</div>
-    ${files.map((f) => `<div class="file-item">${basename(f)}</div>`).join('')}
+    ${fileRows}
+    ${versionSummary}
   `;
+}
+
+function renderVersionWarning(container: HTMLElement) {
+  // Remove existing warning
+  const existing = container.querySelector('#version-warning-section');
+  if (existing) existing.remove();
+
+  const connectedVersion = getConnectedInDesignVersion();
+  const versions = getFileVersions();
+  const files = getSelectedFiles();
+
+  if (!connectedVersion || files.length === 0) return;
+
+  // Parse connected version year from version string like "20.0" -> "2025"
+  const connectedMajor = parseInt(connectedVersion);
+  const versionToYear: Record<number, string> = { 17: '2022', 18: '2023', 19: '2024', 20: '2025', 21: '2026' };
+  const connectedYear = versionToYear[connectedMajor] || connectedVersion;
+
+  const mismatched: string[] = [];
+  let unknownCount = 0;
+  let allMatch = true;
+
+  for (const f of files) {
+    const ver = versions[f];
+    if (!ver) {
+      unknownCount++;
+      allMatch = false;
+    } else if (ver.yearVersion !== connectedYear) {
+      mismatched.push(f);
+      allMatch = false;
+    }
+  }
+
+  const warningEl = document.createElement('div');
+  warningEl.id = 'version-warning-section';
+
+  if (mismatched.length > 0) {
+    // Group by year
+    const yearCounts: Record<string, number> = {};
+    for (const f of mismatched) {
+      const ver = versions[f];
+      if (ver) {
+        yearCounts[ver.yearVersion] = (yearCounts[ver.yearVersion] || 0) + 1;
+      }
+    }
+    const yearSummary = Object.entries(yearCounts)
+      .map(([year, count]) => `${count} file${count === 1 ? '' : 's'} from InDesign ${year}`)
+      .join(', ');
+
+    warningEl.innerHTML = `
+      <div class="version-warning">
+        <strong>Warning:</strong> You are connected to InDesign ${connectedYear}, but ${yearSummary}.
+        Opening and saving these files will upgrade them to ${connectedYear} format.
+        This cannot be undone. Proceed only if this is intentional.
+      </div>
+    `;
+  } else if (allMatch) {
+    warningEl.innerHTML = `
+      <div class="version-ok">
+        Version match -- safe to proceed. All files match InDesign ${connectedYear}.
+      </div>
+    `;
+  }
+
+  if (unknownCount > 0 && mismatched.length === 0) {
+    warningEl.innerHTML += `
+      <div class="version-unknown">
+        Version could not be detected for ${unknownCount} file${unknownCount === 1 ? '' : 's'}.
+      </div>
+    `;
+  }
+
+  // Insert after connection section
+  const connSection = container.querySelector('.connection-section');
+  if (connSection) {
+    connSection.after(warningEl);
+  }
 }
 
 export function init(container: HTMLElement) {
@@ -58,6 +159,17 @@ export function init(container: HTMLElement) {
     <div id="link-summary" style="margin-top:12px;font-size:13px;color:#888;"></div>
   `;
 
+  async function detectAndShowVersions(files: string[]) {
+    try {
+      const result = await window.api.detectFileVersions(files);
+      setFileVersions(result.data);
+      renderFileList(container, files, result.data);
+      renderVersionWarning(container);
+    } catch {
+      // Version detection is best-effort
+    }
+  }
+
   const summaryEl = container.querySelector('#link-summary') as HTMLElement;
 
   async function showLinkSummary(files: string[]) {
@@ -82,8 +194,11 @@ export function init(container: HTMLElement) {
   // Restore existing selection
   const existing = getSelectedFiles();
   if (existing.length > 0) {
-    renderFileList(container, existing);
+    const existingVersions = getFileVersions();
+    const hasVersions = Object.keys(existingVersions).length > 0;
+    renderFileList(container, existing, hasVersions ? existingVersions : undefined);
     showLinkSummary(existing);
+    if (hasVersions) renderVersionWarning(container);
   }
 
   // InDesign connection
@@ -104,6 +219,8 @@ export function init(container: HTMLElement) {
     const result = await window.api.connectInDesign(version);
     if (result.data) {
       setConnStatus('connected', `Connected (InDesign ${result.data.version})`);
+      setConnectedInDesignVersion(result.data.version);
+      renderVersionWarning(container);
       connectBtn.disabled = false;
     } else if (result.error) {
       const isNotRunning =
@@ -122,6 +239,8 @@ export function init(container: HTMLElement) {
         const retry = await window.api.connectInDesign(version);
         if (retry.data) {
           setConnStatus('connected', `Connected (InDesign ${retry.data.version})`);
+          setConnectedInDesignVersion(retry.data.version);
+          renderVersionWarning(container);
         } else {
           setConnStatus('none', retry.error || 'Connection failed after launch');
         }
@@ -150,6 +269,7 @@ export function init(container: HTMLElement) {
       setSelectedFiles(files);
       renderFileList(container, files);
       showLinkSummary(files);
+      detectAndShowVersions(files);
     }
   });
 
@@ -160,6 +280,7 @@ export function init(container: HTMLElement) {
       setSelectedFiles(files);
       renderFileList(container, files);
       showLinkSummary(files);
+      detectAndShowVersions(files);
     }
   });
 
@@ -172,6 +293,7 @@ export function init(container: HTMLElement) {
         setSelectedFiles(files);
         renderFileList(container, files);
         showLinkSummary(files);
+        detectAndShowVersions(files);
       } else {
         renderFileList(container, []);
         const listEl = container.querySelector('.file-list') as HTMLElement;

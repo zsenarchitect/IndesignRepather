@@ -59,6 +59,9 @@ contextBridge.exposeInMainWorld('api', {
   onAnalyzeProgress: (callback: (data: any) => void) =>
     ipcRenderer.on('analyze-progress', (_event, data) => callback(data)),
 
+  // File version detection
+  detectFileVersions: (filePaths: string[]) => ipcRenderer.invoke('detect-file-versions', filePaths),
+
   // Utilities
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getThumbnail: (filePath: string) => ipcRenderer.invoke('get-thumbnail', filePath),

@@ -8,6 +8,7 @@ import * as com from '../src/core/indesign-com';
 import { previewRepath, checkNewPathsExist } from '../src/core/link-analyzer';
 import { executeRepath } from '../src/core/repather';
 import { discoverMappings } from '../src/core/discover';
+import { detectMultipleVersions } from '../src/core/indd-version';
 import type { Mapping } from '../src/shared/types';
 
 // ---------------------------------------------------------------------------
@@ -275,6 +276,17 @@ ipcMain.handle('import-rules', async () => {
   if (result.canceled || !result.filePaths.length) return null;
   const { readFile } = await import('fs/promises');
   return readFile(result.filePaths[0], 'utf-8');
+});
+
+// File version detection ---------------------------------------------------
+ipcMain.handle('detect-file-versions', async (_event, filePaths: string[]) => {
+  const results = await detectMultipleVersions(filePaths);
+  // Convert Map to plain object for IPC
+  const obj: Record<string, any> = {};
+  for (const [path, info] of results) {
+    obj[path] = info;
+  }
+  return { data: obj };
 });
 
 // Utilities ---------------------------------------------------------------

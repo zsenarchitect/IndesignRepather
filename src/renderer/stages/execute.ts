@@ -1,4 +1,4 @@
-import { getSelectedFiles, getMappings, setSelectedFiles, setMappings, setPreviewResults } from '../app';
+import { getSelectedFiles, getMappings, setSelectedFiles, setMappings, setPreviewResults, getFileVersions, getConnectedInDesignVersion } from '../app';
 import type { RepathResult, ProgressUpdate } from '../../shared/types';
 
 function basename(filePath: string): string {
@@ -9,8 +9,31 @@ export async function init(container: HTMLElement) {
   const files = getSelectedFiles();
   const mappings = getMappings();
 
+  // Build version warning for confirmation dialog
+  let versionWarning = '';
+  const connectedVersion = getConnectedInDesignVersion();
+  const fileVersionData = getFileVersions();
+  if (connectedVersion) {
+    const connectedMajor = parseInt(connectedVersion);
+    const versionToYear: Record<number, string> = { 17: '2022', 18: '2023', 19: '2024', 20: '2025', 21: '2026' };
+    const connectedYear = versionToYear[connectedMajor] || connectedVersion;
+
+    const mismatchedByYear: Record<string, number> = {};
+    for (const f of files) {
+      const ver = fileVersionData[f];
+      if (ver && ver.yearVersion !== connectedYear) {
+        mismatchedByYear[ver.yearVersion] = (mismatchedByYear[ver.yearVersion] || 0) + 1;
+      }
+    }
+    const totalMismatched = Object.values(mismatchedByYear).reduce((a, b) => a + b, 0);
+    if (totalMismatched > 0) {
+      const fromVersions = Object.keys(mismatchedByYear).sort().join(', ');
+      versionWarning = `\n\nWARNING: ${totalMismatched} file${totalMismatched === 1 ? '' : 's'} will be upgraded from InDesign ${fromVersions} to ${connectedYear} format.`;
+    }
+  }
+
   // Confirm before executing destructive operation
-  const confirmed = confirm(`This will modify ${files.length} file(s). Proceed?`);
+  const confirmed = confirm(`This will modify ${files.length} file(s).${versionWarning}\n\nProceed?`);
   if (!confirmed) {
     // Navigate back to preview
     container.dispatchEvent(new CustomEvent('navigate-back', { bubbles: true }));

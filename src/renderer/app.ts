@@ -1,4 +1,5 @@
 import type { Mapping, DocumentInfo, RepathResult, ProgressUpdate } from '../shared/types';
+import type { InddVersionInfo } from '../core/indd-version';
 
 // ---------------------------------------------------------------------------
 // Global error handlers (Sentry main process captures renderer errors too,
@@ -46,6 +47,7 @@ declare global {
       onDiscoverProgress: (callback: (data: { found: number }) => void) => void;
       exportRules: (data: string) => Promise<void>;
       importRules: () => Promise<string | null>;
+      detectFileVersions: (filePaths: string[]) => Promise<{ data: Record<string, InddVersionInfo | null> }>;
       getAppVersion: () => Promise<string>;
       getThumbnail: (filePath: string) => Promise<string | null>;
     };
@@ -59,6 +61,8 @@ let currentStage = 1;
 let selectedFiles: string[] = [];
 let mappings: Mapping[] = [];
 let previewResults: DocumentInfo[] = [];
+let fileVersions: Record<string, InddVersionInfo | null> = {};
+let connectedInDesignVersion: string | null = null;
 
 // ---------------------------------------------------------------------------
 // Stage navigation
@@ -212,6 +216,22 @@ export function setPreviewResults(results: DocumentInfo[]) {
 
 export function getCurrentStage(): number {
   return currentStage;
+}
+
+export function getFileVersions(): Record<string, InddVersionInfo | null> {
+  return fileVersions;
+}
+
+export function setFileVersions(versions: Record<string, InddVersionInfo | null>) {
+  fileVersions = versions;
+}
+
+export function getConnectedInDesignVersion(): string | null {
+  return connectedInDesignVersion;
+}
+
+export function setConnectedInDesignVersion(version: string | null) {
+  connectedInDesignVersion = version;
 }
 
 // ---------------------------------------------------------------------------
