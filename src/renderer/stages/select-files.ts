@@ -18,8 +18,8 @@ function renderFileList(container: HTMLElement, files: string[], versions?: Reco
   const fileRows = files.map((f) => {
     const ver = versions?.[f];
     const versionLabel = ver
-      ? `<span style="color:#888;font-size:12px;margin-left:auto;white-space:nowrap;">InDesign ${ver.yearVersion} (v${ver.version})</span>`
-      : '';
+      ? `<span class="version-badge">ID ${ver.yearVersion}</span>`
+      : '<span class="version-badge version-badge-unknown">?</span>';
     return `<div class="file-item" style="display:flex;align-items:center;gap:8px;">${basename(f)}${versionLabel}</div>`;
   }).join('');
 
@@ -208,7 +208,7 @@ export function init(container: HTMLElement) {
 
   // Listen for folder scan progress from main process
   let folderScanListenerAttached = false;
-  let folderScanCallback: ((data: { found: number }) => void) | null = null;
+  let folderScanCallback: ((data: { found: number; currentDir?: string }) => void) | null = null;
   if (!folderScanListenerAttached) {
     folderScanListenerAttached = true;
     window.api.onFolderScanProgress((data) => {
@@ -237,6 +237,11 @@ export function init(container: HTMLElement) {
       summaryEl.textContent = '';
       return;
     }
+    // Only analyze links if InDesign is connected — this is Stage 1, link analysis happens in Stage 2
+    if (!getConnectedInDesignVersion()) {
+      summaryEl.textContent = `${files.length} file${files.length === 1 ? '' : 's'} selected. Connect to InDesign to analyze links.`;
+      return;
+    }
     summaryEl.textContent = 'Analyzing links...';
     try {
       const docs = await window.api.analyzeLinks(files);
@@ -247,7 +252,7 @@ export function init(container: HTMLElement) {
       );
       summaryEl.textContent = `${files.length} file${files.length === 1 ? '' : 's'}, ${totalLinks} link${totalLinks === 1 ? '' : 's'} (${brokenLinks} broken)`;
     } catch {
-      summaryEl.textContent = 'Could not analyze links. Is InDesign running?';
+      summaryEl.textContent = `${files.length} file${files.length === 1 ? '' : 's'} selected. Link analysis requires InDesign connection.`;
     }
   }
 
@@ -354,7 +359,8 @@ export function init(container: HTMLElement) {
     setStatus('Scanning...');
     scanProgress.setIndeterminate('Scanning folder for .indd files...');
     folderScanCallback = (data) => {
-      scanProgress.setIndeterminate(`Scanning... ${data.found} file${data.found === 1 ? '' : 's'} found`);
+      const dirLabel = data.currentDir ? ` in ...${data.currentDir.split('\\').slice(-2).join('\\')}` : '';
+      scanProgress.setIndeterminate(`Scanning${dirLabel} — ${data.found} .indd file${data.found === 1 ? '' : 's'} found`);
     };
     const files = await window.api.selectFolder();
     folderScanCallback = null;

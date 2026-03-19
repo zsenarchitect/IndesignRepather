@@ -319,6 +319,23 @@ p {
 .analyze-row-ok { color: #888; }
 .analyze-row-broken { color: #f44336; }
 
+/* Version badges in file list */
+.version-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #2a3a2a;
+  color: #4caf50;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.version-badge-unknown {
+  background: #2a2a2a;
+  color: #666;
+}
+
 /* Version detection warnings */
 .version-warning { padding: 10px 12px; background: #3a2a00; border: 1px solid #665500; border-radius: 4px; margin: 10px 0; font-size: 13px; color: #ffcc00; }
 .version-ok { padding: 10px 12px; background: #1a2e1a; border: 1px solid #2d5a2d; border-radius: 4px; margin: 10px 0; font-size: 13px; color: #4caf50; }

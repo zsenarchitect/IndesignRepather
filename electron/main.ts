@@ -79,29 +79,40 @@ function createWindow() {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-async function findInddFiles(dir: string, onProgress?: (found: number) => void): Promise<string[]> {
+const SKIP_DIRS = new Set([
+  '.git', 'node_modules', '$RECYCLE.BIN', 'System Volume Information',
+  'AppData', 'Temp', '.svn', '__pycache__', '.venv', 'venv',
+]);
+
+async function findInddFiles(
+  dir: string,
+  onProgress?: (found: number, currentDir: string) => void,
+  maxDepth = 10
+): Promise<string[]> {
   const results: string[] = [];
 
-  async function walk(d: string) {
+  async function walk(d: string, depth: number) {
+    if (depth > maxDepth) return;
     let entries;
     try {
       entries = await readdir(d, { withFileTypes: true });
     } catch {
       return;
     }
+    onProgress?.(results.length, d);
     for (const entry of entries) {
       const full = join(d, entry.name);
       if (entry.isDirectory()) {
-        if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
-        await walk(full);
+        if (entry.name.startsWith('.') || SKIP_DIRS.has(entry.name)) continue;
+        await walk(full, depth + 1);
       } else if (entry.name.toLowerCase().endsWith('.indd')) {
         results.push(full);
-        onProgress?.(results.length);
+        onProgress?.(results.length, d);
       }
     }
   }
 
-  await walk(dir);
+  await walk(dir, 0);
   return results;
 }
 
@@ -125,8 +136,8 @@ ipcMain.handle('select-folder', async () => {
     properties: ['openDirectory'],
   });
   if (result.canceled || result.filePaths.length === 0) return [];
-  return findInddFiles(result.filePaths[0], (found) => {
-    mainWindow?.webContents.send('folder-scan-progress', { found });
+  return findInddFiles(result.filePaths[0], (found, currentDir) => {
+    mainWindow?.webContents.send('folder-scan-progress', { found, currentDir });
   });
 });
 
