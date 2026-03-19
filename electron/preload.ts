@@ -5,6 +5,10 @@ contextBridge.exposeInMainWorld('api', {
   selectFiles: () => ipcRenderer.invoke('select-files'),
   selectFolder: () => ipcRenderer.invoke('select-folder'),
 
+  // InDesign connection
+  connectInDesign: (version?: string) => ipcRenderer.invoke('connect-indesign', version),
+  launchInDesign: () => ipcRenderer.invoke('launch-indesign'),
+
   // InDesign COM
   getOpenDocuments: async () => {
     const result = await ipcRenderer.invoke('get-open-documents');
@@ -50,6 +54,10 @@ contextBridge.exposeInMainWorld('api', {
   // Export/Import rules
   exportRules: (data: string) => ipcRenderer.invoke('export-rules', data),
   importRules: () => ipcRenderer.invoke('import-rules'),
+
+  // Analyze progress
+  onAnalyzeProgress: (callback: (data: any) => void) =>
+    ipcRenderer.on('analyze-progress', (_event, data) => callback(data)),
 
   // Utilities
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),

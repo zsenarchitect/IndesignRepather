@@ -21,6 +21,21 @@ function renderFileList(container: HTMLElement, files: string[]) {
 
 export function init(container: HTMLElement) {
   container.innerHTML = `
+    <div class="connection-section">
+      <h3 class="connection-title">InDesign Connection</h3>
+      <div class="connection-controls">
+        <select id="indesign-version" class="version-select">
+          <option value="">Detect Automatically</option>
+          <option value="2025">InDesign 2025</option>
+          <option value="2024">InDesign 2024</option>
+          <option value="2023">InDesign 2023</option>
+          <option value="2022">InDesign 2022</option>
+        </select>
+        <button id="btn-connect">Connect</button>
+        <span id="connection-status" class="conn-status conn-status-none">Not connected</span>
+      </div>
+    </div>
+
     <h2>Select InDesign Documents</h2>
     <p>Select the InDesign documents with broken links. The app will help you update link paths to their new locations.</p>
 
@@ -70,6 +85,52 @@ export function init(container: HTMLElement) {
     renderFileList(container, existing);
     showLinkSummary(existing);
   }
+
+  // InDesign connection
+  const versionSelect = container.querySelector('#indesign-version') as HTMLSelectElement;
+  const connectBtn = container.querySelector('#btn-connect') as HTMLButtonElement;
+  const connStatus = container.querySelector('#connection-status') as HTMLElement;
+
+  function setConnStatus(state: 'none' | 'connecting' | 'connected', label: string) {
+    connStatus.className = `conn-status conn-status-${state}`;
+    connStatus.textContent = label;
+  }
+
+  connectBtn.addEventListener('click', async () => {
+    const version = versionSelect.value || undefined;
+    setConnStatus('connecting', 'Connecting...');
+    connectBtn.disabled = true;
+
+    const result = await window.api.connectInDesign(version);
+    if (result.data) {
+      setConnStatus('connected', `Connected (InDesign ${result.data.version})`);
+      connectBtn.disabled = false;
+    } else if (result.error) {
+      const isNotRunning =
+        result.error.includes('not running') ||
+        result.error.includes('Operation unavailable');
+
+      if (isNotRunning) {
+        setConnStatus('none', 'Not running. Launching...');
+        const launchResult = await window.api.launchInDesign();
+        if (launchResult.error) {
+          setConnStatus('none', launchResult.error);
+          connectBtn.disabled = false;
+          return;
+        }
+        // Retry connection after launch
+        const retry = await window.api.connectInDesign(version);
+        if (retry.data) {
+          setConnStatus('connected', `Connected (InDesign ${retry.data.version})`);
+        } else {
+          setConnStatus('none', retry.error || 'Connection failed after launch');
+        }
+      } else {
+        setConnStatus('none', result.error);
+      }
+      connectBtn.disabled = false;
+    }
+  });
 
   // Keyboard activation for file option cards
   container.querySelectorAll('.file-option').forEach((card) => {

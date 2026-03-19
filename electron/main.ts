@@ -134,6 +134,34 @@ ipcMain.handle('select-folder-path', async () => {
 });
 
 // InDesign COM ------------------------------------------------------------
+ipcMain.handle('connect-indesign', (_event, version?: string) => {
+  try {
+    const result = com.connect(version);
+    return { data: result };
+  } catch (e: any) {
+    return { error: String(e.message || e) };
+  }
+});
+
+ipcMain.handle('launch-indesign', async () => {
+  const { exec } = require('child_process');
+  const { existsSync } = require('fs');
+  const paths = [
+    'C:\\Program Files\\Adobe\\Adobe InDesign 2025\\InDesign.exe',
+    'C:\\Program Files\\Adobe\\Adobe InDesign 2024\\InDesign.exe',
+    'C:\\Program Files\\Adobe\\Adobe InDesign 2023\\InDesign.exe',
+    'C:\\Program Files\\Adobe\\Adobe InDesign CC 2022\\InDesign.exe',
+  ];
+
+  const found = paths.find((p: string) => existsSync(p));
+  if (!found) return { error: 'InDesign not found. Please launch it manually.' };
+
+  exec(`"${found}"`);
+  // Wait for InDesign to initialize
+  await new Promise((resolve) => setTimeout(resolve, 5000));
+  return { data: { launched: true, path: found } };
+});
+
 ipcMain.handle('get-open-documents', () => {
   try {
     com.connect();
@@ -143,10 +171,19 @@ ipcMain.handle('get-open-documents', () => {
   }
 });
 
-ipcMain.handle('analyze-links', (_event, filePaths: string[]) => {
+ipcMain.handle('analyze-links', async (_event, filePaths: string[]) => {
   try {
     com.connect();
-    return { data: filePaths.map((fp) => com.getDocumentLinks(fp)) };
+    const results = [];
+    for (let i = 0; i < filePaths.length; i++) {
+      mainWindow?.webContents.send('analyze-progress', {
+        currentFile: filePaths[i],
+        currentIndex: i,
+        totalFiles: filePaths.length,
+      });
+      results.push(com.getDocumentLinks(filePaths[i]));
+    }
+    return { data: results };
   } catch (e: any) {
     return { error: String(e.message || e) };
   }

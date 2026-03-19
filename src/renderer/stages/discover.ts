@@ -3,11 +3,27 @@ import type { Mapping } from '../../shared/types';
 
 let discoverListenerAttached = false;
 let discoverProgressCallback: ((data: { found: number }) => void) | null = null;
+let analyzeListenerAttached = false;
+let analyzeProgressCallback: ((data: { currentFile: string; currentIndex: number; totalFiles: number }) => void) | null = null;
+
+// Cache broken links from analysis so the scan can reuse them
+let cachedBrokenLinks: { name: string; filePath: string }[] = [];
 
 export function init(container: HTMLElement) {
   container.innerHTML = `
     <h2>Discover Mappings</h2>
     <p>Scan folders to auto-discover where broken links should point. This stage is optional.</p>
+
+    <div class="broken-link-section">
+      <h3 style="font-size:14px;margin-bottom:8px;">Broken Link Analysis</h3>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+        <button id="btn-analyze">Scan Selected Files</button>
+        <span id="analyze-status" style="font-size:13px;color:#888;"></span>
+      </div>
+      <div class="progress-bar hidden" id="analyze-progress-bar"><div class="progress-fill" id="analyze-progress-fill" style="width:0%"></div></div>
+      <div id="analyze-current-file" class="hidden" style="font-size:12px;color:#666;margin-top:4px;"></div>
+      <div id="analyze-results" class="hidden" style="margin-top:12px;"></div>
+    </div>
 
     <div style="margin:12px 0;">
       <h3 style="font-size:14px;margin-bottom:8px;">Search Roots</h3>
@@ -30,6 +46,79 @@ export function init(container: HTMLElement) {
 
   let searchRoots: string[] = [];
   let suggestedMappings: Mapping[] = [];
+
+  // -- Broken Link Analysis --
+  const analyzeBtn = container.querySelector('#btn-analyze') as HTMLButtonElement;
+  const analyzeStatusEl = container.querySelector('#analyze-status') as HTMLElement;
+  const analyzeProgressBar = container.querySelector('#analyze-progress-bar') as HTMLElement;
+  const analyzeProgressFill = container.querySelector('#analyze-progress-fill') as HTMLElement;
+  const analyzeCurrentFile = container.querySelector('#analyze-current-file') as HTMLElement;
+  const analyzeResultsEl = container.querySelector('#analyze-results') as HTMLElement;
+
+  // Listen for per-file progress (attach once)
+  analyzeProgressCallback = (data) => {
+    const pct = Math.round(((data.currentIndex + 1) / data.totalFiles) * 100);
+    analyzeProgressFill.style.width = `${pct}%`;
+    const fileName = data.currentFile.replace(/\\/g, '/').split('/').pop() || data.currentFile;
+    analyzeCurrentFile.textContent = `Scanning file ${data.currentIndex + 1} of ${data.totalFiles}: ${fileName}`;
+  };
+  if (!analyzeListenerAttached) {
+    analyzeListenerAttached = true;
+    window.api.onAnalyzeProgress((data) => {
+      analyzeProgressCallback?.(data);
+    });
+  }
+
+  analyzeBtn.addEventListener('click', async () => {
+    const files = getSelectedFiles();
+    if (files.length === 0) {
+      analyzeStatusEl.textContent = 'No files selected. Go back to Stage 1.';
+      return;
+    }
+
+    analyzeBtn.disabled = true;
+    analyzeStatusEl.textContent = 'Analyzing...';
+    analyzeProgressBar.classList.remove('hidden');
+    analyzeProgressFill.style.width = '0%';
+    analyzeCurrentFile.classList.remove('hidden');
+    analyzeCurrentFile.textContent = '';
+    analyzeResultsEl.classList.add('hidden');
+
+    try {
+      const docs = await window.api.analyzeLinks(files);
+      analyzeProgressBar.classList.add('hidden');
+      analyzeCurrentFile.classList.add('hidden');
+
+      // Collect per-file stats
+      let totalBroken = 0;
+      let filesWithBroken = 0;
+      cachedBrokenLinks = [];
+
+      const rows = docs.map((doc: any) => {
+        const broken = doc.links.filter((l: any) => l.status === 'missing' || l.status === 'inaccessible');
+        totalBroken += broken.length;
+        if (broken.length > 0) filesWithBroken++;
+        for (const l of broken) {
+          cachedBrokenLinks.push({ name: l.name, filePath: l.filePath });
+        }
+        const docName = doc.name || doc.path.replace(/\\/g, '/').split('/').pop();
+        if (broken.length === 0) {
+          return `<div class="analyze-row analyze-row-ok">${docName} -- 0 broken links (all links OK)</div>`;
+        }
+        return `<div class="analyze-row analyze-row-broken">${docName} -- ${broken.length} broken link${broken.length === 1 ? '' : 's'}</div>`;
+      });
+
+      analyzeStatusEl.textContent = `${totalBroken} broken link${totalBroken === 1 ? '' : 's'} across ${filesWithBroken} file${filesWithBroken === 1 ? '' : 's'}`;
+
+      analyzeResultsEl.innerHTML = rows.join('');
+      analyzeResultsEl.classList.remove('hidden');
+    } catch {
+      analyzeStatusEl.textContent = 'Failed to analyze files. Is InDesign running?';
+      analyzeProgressBar.classList.add('hidden');
+      analyzeCurrentFile.classList.add('hidden');
+    }
+    analyzeBtn.disabled = false;
+  });
 
   const rootsListEl = container.querySelector('#search-roots-list') as HTMLElement;
   const scanBtn = container.querySelector('#btn-scan') as HTMLButtonElement;
@@ -110,25 +199,30 @@ export function init(container: HTMLElement) {
     scanStatus.textContent = 'Scanning...';
     resultsEl.classList.add('hidden');
 
-    // Collect broken links from selected files by analyzing them
-    const files = getSelectedFiles();
+    // Use cached broken links from analysis if available, otherwise analyze now
     let brokenLinks: { name: string; filePath: string }[] = [];
-    try {
-      const docs = await window.api.analyzeLinks(files);
-      for (const doc of docs) {
-        for (const link of doc.links) {
-          if (link.status === 'missing' || link.status === 'inaccessible') {
-            brokenLinks.push({ name: link.name, filePath: link.filePath });
+    if (cachedBrokenLinks.length > 0) {
+      brokenLinks = cachedBrokenLinks;
+    } else {
+      const files = getSelectedFiles();
+      try {
+        const docs = await window.api.analyzeLinks(files);
+        for (const doc of docs) {
+          for (const link of doc.links) {
+            if (link.status === 'missing' || link.status === 'inaccessible') {
+              brokenLinks.push({ name: link.name, filePath: link.filePath });
+            }
           }
         }
+        cachedBrokenLinks = brokenLinks;
+      } catch {
+        scanStatus.textContent = 'Failed to analyze files. Is InDesign running?';
+        scanBtn.disabled = false;
+        cancelBtn.classList.add('hidden');
+        progressBar.classList.add('hidden');
+        fileCountEl.classList.add('hidden');
+        return;
       }
-    } catch {
-      scanStatus.textContent = 'Failed to analyze files. Is InDesign running?';
-      scanBtn.disabled = false;
-      cancelBtn.classList.add('hidden');
-      progressBar.classList.add('hidden');
-      fileCountEl.classList.add('hidden');
-      return;
     }
 
     if (brokenLinks.length === 0) {

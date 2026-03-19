@@ -258,3 +258,57 @@ p {
 .file-breakdown { width: 100%; border-collapse: collapse; margin-top: 12px; }
 .file-breakdown th { text-align: left; padding: 6px 8px; color: #888; font-size: 12px; border-bottom: 1px solid #333; }
 .file-breakdown td { padding: 4px 8px; border-bottom: 1px solid #222; font-size: 13px; }
+
+/* InDesign connection section */
+.connection-section {
+  background: #2a2a2a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+}
+.connection-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.connection-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.version-select {
+  background: #333;
+  color: #e0e0e0;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.version-select:focus { outline: none; border-color: #888; }
+
+.conn-status {
+  font-size: 13px;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+.conn-status-none { color: #888; }
+.conn-status-connecting { color: #ffc107; }
+.conn-status-connected { color: #4caf50; }
+
+/* Broken link analysis section */
+.broken-link-section {
+  background: #2a2a2a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+}
+.analyze-row {
+  padding: 4px 0;
+  font-size: 13px;
+  border-bottom: 1px solid #222;
+}
+.analyze-row-ok { color: #888; }
+.analyze-row-broken { color: #f44336; }

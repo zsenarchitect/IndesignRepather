@@ -44,11 +44,12 @@ function ensureBridge() {
   return bridge;
 }
 
-export function connect(): { version: string; bridge: string } {
+export function connect(version?: string): { version: string; bridge: string } {
   const b = ensureBridge();
+  const progId = version ? `InDesign.Application.${version}` : 'InDesign.Application';
 
   try {
-    app = b.createObject('InDesign.Application');
+    app = b.createObject(progId);
   } catch (e: any) {
     const msg = String(e);
     if (msg.includes('Class not registered')) {
@@ -63,8 +64,8 @@ export function connect(): { version: string; bridge: string } {
     throw new Error(`Failed to connect to InDesign: ${msg}`);
   }
 
-  const version = String(app.Version);
-  return { version, bridge: comBridge };
+  const appVersion = String(app.Version);
+  return { version: appVersion, bridge: comBridge };
 }
 
 export function isConnected(): boolean {

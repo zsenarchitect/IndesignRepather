@@ -22,8 +22,11 @@ declare global {
       selectFiles: () => Promise<string[]>;
       selectFolder: () => Promise<string[]>;
       selectFolderPath: () => Promise<string | null>;
+      connectInDesign: (version?: string) => Promise<{ data?: { version: string; bridge: string }; error?: string }>;
+      launchInDesign: () => Promise<{ data?: { launched: boolean; path: string }; error?: string }>;
       getOpenDocuments: () => Promise<{ name: string; path: string }[]>;
       analyzeLinks: (filePaths: string[]) => Promise<DocumentInfo[]>;
+      onAnalyzeProgress: (callback: (data: { currentFile: string; currentIndex: number; totalFiles: number }) => void) => void;
       discoverMappings: (
         brokenLinks: { name: string; filePath: string }[],
         searchRoots: string[]
