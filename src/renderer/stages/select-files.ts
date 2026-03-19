@@ -157,17 +157,10 @@ export function init(container: HTMLElement) {
     <div class="connection-section">
       <h3 class="connection-title">InDesign Connection</h3>
       <div class="connection-controls">
-        <select id="indesign-version" class="version-select">
-          <option value="">Detect Automatically</option>
-          <option value="2026">InDesign 2026</option>
-          <option value="2025">InDesign 2025</option>
-          <option value="2024">InDesign 2024</option>
-          <option value="2023">InDesign 2023</option>
-          <option value="2022">InDesign 2022</option>
-        </select>
-        <button id="btn-connect">Connect</button>
+        <button id="btn-connect">Connect to InDesign</button>
         <span id="connection-status" class="conn-status conn-status-none">Not connected</span>
       </div>
+      <p style="font-size:11px;color:#666;margin-top:4px;">Connects to whichever InDesign is currently running. Version mismatch is detected automatically from file headers.</p>
     </div>
 
     <h2>Select InDesign Documents</h2>
@@ -267,7 +260,6 @@ export function init(container: HTMLElement) {
   }
 
   // InDesign connection
-  const versionSelect = container.querySelector('#indesign-version') as HTMLSelectElement;
   const connectBtn = container.querySelector('#btn-connect') as HTMLButtonElement;
   const connStatus = container.querySelector('#connection-status') as HTMLElement;
 
@@ -277,13 +269,12 @@ export function init(container: HTMLElement) {
   }
 
   connectBtn.addEventListener('click', async () => {
-    const version = versionSelect.value || undefined;
     setConnStatus('connecting', 'Connecting...');
     connectProgress.setIndeterminate('Connecting to InDesign...');
     connectBtn.disabled = true;
 
     setStatus('Connecting to InDesign...');
-    const result = await window.api.connectInDesign(version);
+    const result = await window.api.connectInDesign();
     if (result.data) {
       connectProgress.hide();
       setConnStatus('connected', `Connected (InDesign ${result.data.version})`);
@@ -304,14 +295,15 @@ export function init(container: HTMLElement) {
           connectProgress.hide();
           setConnStatus('none', launchResult.error);
           connectBtn.disabled = false;
+          setStatus('Ready');
           return;
         }
-        // Retry connection after launch
         connectProgress.setIndeterminate('Connecting after launch...');
-        const retry = await window.api.connectInDesign(version);
+        const retry = await window.api.connectInDesign();
         if (retry.data) {
           setConnStatus('connected', `Connected (InDesign ${retry.data.version})`);
           setConnectedInDesignVersion(retry.data.version);
+          setStatus(`Connected to InDesign ${retry.data.version}`);
           renderVersionWarning(container);
         } else {
           setConnStatus('none', retry.error || 'Connection failed after launch');

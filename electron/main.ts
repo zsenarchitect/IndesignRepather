@@ -84,21 +84,26 @@ async function findInddFiles(
   onProgress?: (found: number, currentDir: string) => void,
 ): Promise<string[]> {
   const { execFile: execFileCb } = require('child_process');
+  const escapedDir = dir.replace(/'/g, "''");
+
+  onProgress?.(0, dir);
 
   return new Promise((resolve) => {
-    onProgress?.(0, dir);
-
-    // Use Windows `dir /s /b` — OS-level recursive search, much faster than Node.js walk
-    execFileCb('cmd.exe', ['/c', `dir /s /b "${dir}\\*.indd" 2>nul`], {
+    // Use PowerShell Get-ChildItem — reliable recursive search, handles UNC and spaces
+    execFileCb('powershell.exe', [
+      '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+      '-Command',
+      `Get-ChildItem -Path '${escapedDir}' -Filter '*.indd' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName`,
+    ], {
       maxBuffer: 10 * 1024 * 1024,
-      timeout: 30000,
+      timeout: 60000,
       windowsHide: true,
     }, (err: any, stdout: string) => {
       if (err || !stdout.trim()) {
         resolve([]);
         return;
       }
-      const files = stdout.trim().split('\r\n').filter(Boolean);
+      const files = stdout.trim().split(/\r?\n/).filter(Boolean);
       onProgress?.(files.length, dir);
       resolve(files);
     });

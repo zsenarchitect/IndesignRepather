@@ -84,8 +84,11 @@ export function checkVersionCompatibility(
  * Connect to InDesign and return version info.
  * Sets UserInteractionLevel to neverInteract immediately after creating COM object.
  */
-export async function connect(version?: string): Promise<{ version: string; bridge: string }> {
-  const progId = version ? `InDesign.Application.${version}` : 'InDesign.Application';
+export async function connect(_version?: string): Promise<{ version: string; bridge: string }> {
+  // Always use generic ProgID — connects to whichever InDesign is running.
+  // Version-specific ProgIDs like "InDesign.Application.2026" don't exist.
+  // The version dropdown is only used for mismatch warnings, not COM connection.
+  const progId = 'InDesign.Application';
 
   const script = `
     try {
