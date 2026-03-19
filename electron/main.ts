@@ -79,41 +79,30 @@ function createWindow() {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-const SKIP_DIRS = new Set([
-  '.git', 'node_modules', '$RECYCLE.BIN', 'System Volume Information',
-  'AppData', 'Temp', '.svn', '__pycache__', '.venv', 'venv',
-]);
-
 async function findInddFiles(
   dir: string,
   onProgress?: (found: number, currentDir: string) => void,
-  maxDepth = 10
 ): Promise<string[]> {
-  const results: string[] = [];
+  const { execFile: execFileCb } = require('child_process');
 
-  async function walk(d: string, depth: number) {
-    if (depth > maxDepth) return;
-    let entries;
-    try {
-      entries = await readdir(d, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    onProgress?.(results.length, d);
-    for (const entry of entries) {
-      const full = join(d, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name.startsWith('.') || SKIP_DIRS.has(entry.name)) continue;
-        await walk(full, depth + 1);
-      } else if (entry.name.toLowerCase().endsWith('.indd')) {
-        results.push(full);
-        onProgress?.(results.length, d);
+  return new Promise((resolve) => {
+    onProgress?.(0, dir);
+
+    // Use Windows `dir /s /b` — OS-level recursive search, much faster than Node.js walk
+    execFileCb('cmd.exe', ['/c', `dir /s /b "${dir}\\*.indd" 2>nul`], {
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 30000,
+      windowsHide: true,
+    }, (err: any, stdout: string) => {
+      if (err || !stdout.trim()) {
+        resolve([]);
+        return;
       }
-    }
-  }
-
-  await walk(dir, 0);
-  return results;
+      const files = stdout.trim().split('\r\n').filter(Boolean);
+      onProgress?.(files.length, dir);
+      resolve(files);
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
