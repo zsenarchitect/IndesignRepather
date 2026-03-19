@@ -1,0 +1,20 @@
+appId: com.ennead.indesign-repather
+productName: InDesign Repather
+directories:
+  output: release
+files:
+  - dist/**/*
+  - "!node_modules/.cache/**"
+  - "!docs/**"
+forceCodeSigning: false
+win:
+  target: nsis
+  signAndEditExecutable: false
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+asar: true
+publish:
+  provider: generic
+  url: https://enneadtab.com/indesign-repather/releases

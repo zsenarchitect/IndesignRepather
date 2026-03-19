@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InDesign Repather</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header>
+    <h1>InDesign Repather</h1>
+    <span class="brand">Ennead Architects</span>
+  </header>
+
+  <nav class="stage-bar">
+    <div class="stage active" data-stage="1">1. Files</div>
+    <div class="stage" data-stage="2">2. Discover</div>
+    <div class="stage" data-stage="3">3. Rules</div>
+    <div class="stage" data-stage="4">4. Preview</div>
+    <div class="stage" data-stage="5">5. Execute</div>
+  </nav>
+
+  <main>
+    <section id="stage-1" class="stage-content">
+      <h2>Select InDesign Documents</h2>
+      <p>Choose how to select your .indd files</p>
+    </section>
+    <section id="stage-2" class="stage-content hidden"></section>
+    <section id="stage-3" class="stage-content hidden"></section>
+    <section id="stage-4" class="stage-content hidden"></section>
+    <section id="stage-5" class="stage-content hidden"></section>
+  </main>
+
+  <footer>
+    <button id="btn-back" class="hidden">Back</button>
+    <span class="spacer"></span>
+    <span id="app-version" class="version-label"></span>
+    <button id="btn-next" disabled>Next</button>
+  </footer>
+
+  <script src="./app.ts" type="module"></script>
+</body>
+</html>
