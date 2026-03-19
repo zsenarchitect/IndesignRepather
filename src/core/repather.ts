@@ -27,7 +27,7 @@ export async function executeRepath(
         totalFiles: filePaths.length,
       });
 
-      const docInfo = com.getDocumentLinks(filePath);
+      const docInfo = await com.getDocumentLinks(filePath);
       const [previewed] = await checkNewPathsExist(
         previewRepath([docInfo], mappings)
       );
@@ -48,7 +48,7 @@ export async function executeRepath(
         });
 
         try {
-          com.relinkAndSave(filePath, link.name, link.newPath!);
+          await com.relinkAndSave(filePath, link.name, link.newPath!);
           result.repathedLinks++;
         } catch (e: any) {
           result.failedLinks++;

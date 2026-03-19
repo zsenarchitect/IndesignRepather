@@ -262,25 +262,30 @@ export function init(container: HTMLElement) {
     });
   });
 
+  async function handleFilesSelected(files: string[]) {
+    setSelectedFiles(files);
+    renderFileList(container, files);
+    detectAndShowVersions(files);
+    // Link summary requires InDesign COM — don't block on it
+    showLinkSummary(files).catch(() => {});
+  }
+
   // Pick individual files
   container.querySelector('#opt-pick-files')?.addEventListener('click', async () => {
     const files = await window.api.selectFiles();
     if (files.length > 0) {
-      setSelectedFiles(files);
-      renderFileList(container, files);
-      showLinkSummary(files);
-      detectAndShowVersions(files);
+      await handleFilesSelected(files);
     }
   });
 
   // Pick folder
   container.querySelector('#opt-pick-folder')?.addEventListener('click', async () => {
+    summaryEl.textContent = 'Scanning folder for .indd files...';
     const files = await window.api.selectFolder();
     if (files.length > 0) {
-      setSelectedFiles(files);
-      renderFileList(container, files);
-      showLinkSummary(files);
-      detectAndShowVersions(files);
+      await handleFilesSelected(files);
+    } else {
+      summaryEl.textContent = 'No .indd files found in the selected folder.';
     }
   });
 
@@ -289,20 +294,15 @@ export function init(container: HTMLElement) {
     try {
       const docs = await window.api.getOpenDocuments();
       if (docs.length > 0) {
-        const files = docs.map((d) => d.path);
-        setSelectedFiles(files);
-        renderFileList(container, files);
-        showLinkSummary(files);
-        detectAndShowVersions(files);
+        const files = docs.map((d: any) => d.path);
+        await handleFilesSelected(files);
       } else {
         renderFileList(container, []);
-        const listEl = container.querySelector('.file-list') as HTMLElement;
-        listEl.innerHTML = '<div style="color:#888;font-size:13px;">No documents open in InDesign</div>';
+        summaryEl.textContent = 'No documents open in InDesign.';
       }
-    } catch (err) {
-      const listEl = container.querySelector('.file-list') as HTMLElement;
-      listEl.innerHTML =
-        '<div style="color:#f44336;font-size:13px;">Could not connect to InDesign. Make sure it is running.</div>';
+    } catch (err: any) {
+      summaryEl.innerHTML =
+        '<span style="color:#f44336;">Could not connect to InDesign. Make sure it is running.</span>';
     }
   });
 }

@@ -135,9 +135,9 @@ ipcMain.handle('select-folder-path', async () => {
 });
 
 // InDesign COM ------------------------------------------------------------
-ipcMain.handle('connect-indesign', (_event, version?: string) => {
+ipcMain.handle('connect-indesign', async (_event, version?: string) => {
   try {
-    const result = com.connect(version);
+    const result = await com.connect(version);
     return { data: result };
   } catch (e: any) {
     return { error: String(e.message || e) };
@@ -163,10 +163,9 @@ ipcMain.handle('launch-indesign', async () => {
   return { data: { launched: true, path: found } };
 });
 
-ipcMain.handle('get-open-documents', () => {
+ipcMain.handle('get-open-documents', async () => {
   try {
-    com.connect();
-    return { data: com.getOpenDocuments() };
+    return { data: await com.getOpenDocuments() };
   } catch (e: any) {
     return { error: String(e.message || e) };
   }
@@ -174,7 +173,6 @@ ipcMain.handle('get-open-documents', () => {
 
 ipcMain.handle('analyze-links', async (_event, filePaths: string[]) => {
   try {
-    com.connect();
     const results = [];
     for (let i = 0; i < filePaths.length; i++) {
       mainWindow?.webContents.send('analyze-progress', {
@@ -182,7 +180,7 @@ ipcMain.handle('analyze-links', async (_event, filePaths: string[]) => {
         currentIndex: i,
         totalFiles: filePaths.length,
       });
-      results.push(com.getDocumentLinks(filePaths[i]));
+      results.push(await com.getDocumentLinks(filePaths[i]));
     }
     return { data: results };
   } catch (e: any) {
@@ -212,10 +210,12 @@ ipcMain.handle(
   'preview-repath',
   async (_event, filePaths: string[], mappings: Mapping[]) => {
     try {
-      com.connect();
-      const documents = filePaths.map((fp) => com.getDocumentLinks(fp));
+      const documents = [];
+      for (const fp of filePaths) {
+        documents.push(await com.getDocumentLinks(fp));
+      }
       const previewed = previewRepath(documents, mappings);
-      return { data: checkNewPathsExist(previewed) };
+      return { data: await checkNewPathsExist(previewed) };
     } catch (e: any) {
       return { error: String(e.message || e) };
     }

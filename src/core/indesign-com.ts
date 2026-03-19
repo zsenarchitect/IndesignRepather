@@ -1,200 +1,253 @@
-import { DocumentInfo, LinkInfo, LINK_STATUS, INTERACTION_LEVEL } from '../shared/types';
+/**
+ * InDesign COM bridge via PowerShell subprocess.
+ *
+ * No native Node modules needed — uses PowerShell's built-in COM support
+ * which is available on every Windows machine. Each function spawns a
+ * short-lived PowerShell process, passes a script, and parses JSON output.
+ *
+ * This approach:
+ * - Works in packaged Electron (no node-gyp, no native modules)
+ * - Works on every Windows 10/11 machine out of the box
+ * - Uses the same COM API as the original Python backend
+ */
 
-let app: any = null;
-let comBridge: string = 'none';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import { DocumentInfo, LinkInfo } from '../shared/types';
 
-// Try to load a COM bridge - this will be resolved at runtime on Windows
-function getComBridge(): { createObject: (progId: string) => any } {
-  // In packaged app or dev, try win32ole first
-  try {
-    const win32ole = require('win32ole');
-    comBridge = 'win32ole';
-    return {
-      createObject: (progId: string) => new win32ole.Object(progId),
-    };
-  } catch {
-    // win32ole not available
+const execFileAsync = promisify(execFile);
+
+// Track connection state
+let connectedVersion: string | null = null;
+let connectedProgId: string | null = null;
+
+/**
+ * Execute a PowerShell script and return parsed JSON output.
+ */
+async function runPS(script: string): Promise<any> {
+  const { stdout, stderr } = await execFileAsync('powershell.exe', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy', 'Bypass',
+    '-Command', script,
+  ], {
+    timeout: 60000,
+    maxBuffer: 10 * 1024 * 1024, // 10MB for large link lists
+    windowsHide: true,
+  });
+
+  if (!stdout.trim()) {
+    if (stderr.trim()) throw new Error(stderr.trim());
+    return null;
   }
 
-  // Fallback: edge-js
   try {
-    const edge = require('edge-js');
-    comBridge = 'edge-js';
-    return {
-      createObject: (progId: string) => {
-        // edge-js COM bridge would go here
-        throw new Error('edge-js COM bridge not yet implemented');
-      },
-    };
+    return JSON.parse(stdout);
   } catch {
-    // edge-js not available
+    throw new Error(stdout.trim() || stderr.trim() || 'Unknown PowerShell error');
   }
-
-  throw new Error(
-    'No COM bridge available. This app requires Windows with win32ole or edge-js installed.'
-  );
 }
 
-let bridge: ReturnType<typeof getComBridge> | null = null;
-
-function ensureBridge() {
-  if (!bridge) {
-    bridge = getComBridge();
-  }
-  return bridge;
-}
-
-export function connect(version?: string): { version: string; bridge: string } {
-  const b = ensureBridge();
+/**
+ * Connect to InDesign and return version info.
+ */
+export async function connect(version?: string): Promise<{ version: string; bridge: string }> {
   const progId = version ? `InDesign.Application.${version}` : 'InDesign.Application';
 
-  try {
-    app = b.createObject(progId);
-  } catch (e: any) {
-    const msg = String(e);
-    if (msg.includes('Class not registered')) {
-      throw new Error('InDesign is not installed or COM is not registered');
+  const script = `
+    try {
+      $app = New-Object -ComObject '${progId}'
+      $ver = $app.Version
+      @{ version = "$ver"; progId = "${progId}" } | ConvertTo-Json
+    } catch {
+      $msg = $_.Exception.Message
+      if ($msg -match 'CLSID|Class not registered') {
+        Write-Error 'InDesign is not installed or COM is not registered'
+      } elseif ($msg -match 'Operation unavailable|not running|Cannot create') {
+        Write-Error 'InDesign is not running. Please launch InDesign first.'
+      } else {
+        Write-Error "Failed to connect: $msg"
+      }
+      exit 1
     }
-    if (msg.includes('Operation unavailable')) {
-      throw new Error('InDesign is not running. Please launch InDesign first.');
-    }
-    if (msg.includes('Access is denied')) {
-      throw new Error('Access denied. Try running as administrator.');
-    }
-    throw new Error(`Failed to connect to InDesign: ${msg}`);
-  }
+  `;
 
-  const appVersion = String(app.Version);
-  return { version: appVersion, bridge: comBridge };
+  const result = await runPS(script);
+  connectedVersion = result.version;
+  connectedProgId = result.progId;
+  return { version: result.version, bridge: 'powershell' };
 }
 
 export function isConnected(): boolean {
-  return app !== null;
+  return connectedVersion !== null;
 }
 
-export function getOpenDocuments(): { name: string; path: string }[] {
-  if (!app) throw new Error('Not connected to InDesign');
+/**
+ * Get list of currently open documents in InDesign.
+ */
+export async function getOpenDocuments(): Promise<{ name: string; path: string }[]> {
+  const progId = connectedProgId || 'InDesign.Application';
 
-  const docs: { name: string; path: string }[] = [];
-  const count = app.Documents.Count;
-  for (let i = 0; i < count; i++) {
-    const doc = app.Documents.Item(i);
-    docs.push({
-      name: String(doc.Name),
-      path: String(doc.FilePath),
-    });
-  }
-  return docs;
-}
-
-function mapLinkStatus(statusCode: number): LinkInfo['status'] {
-  switch (statusCode) {
-    case LINK_STATUS.NORMAL: return 'normal';
-    case LINK_STATUS.OUT_OF_DATE: return 'out-of-date';
-    case LINK_STATUS.MISSING: return 'missing';
-    case LINK_STATUS.EMBEDDED: return 'embedded';
-    case LINK_STATUS.INACCESSIBLE: return 'inaccessible';
-    default: return 'missing';
-  }
-}
-
-export function getDocumentLinks(filePath: string): DocumentInfo {
-  if (!app) throw new Error('Not connected to InDesign');
-
-  const originalLevel = app.ScriptPreferences.UserInteractionLevel;
-  app.ScriptPreferences.UserInteractionLevel = INTERACTION_LEVEL.NEVER_INTERACT;
-
-  try {
-    // Check if document is already open
-    let doc: any = null;
-    const docCount = app.Documents.Count;
-    for (let i = 0; i < docCount; i++) {
-      const d = app.Documents.Item(i);
-      if (String(d.FilePath).toLowerCase() === filePath.toLowerCase()) {
-        doc = d;
-        break;
-      }
-    }
-
-    if (!doc) {
-      doc = app.Open(filePath, true);
-    }
-
-    const links: LinkInfo[] = [];
-    const linkCount = doc.Links.Count;
-
-    for (let i = 0; i < linkCount; i++) {
+  const script = `
+    try {
+      $app = [System.Runtime.InteropServices.Marshal]::GetActiveObject('${progId}')
+    } catch {
       try {
-        const link = doc.Links.Item(i);
-        const linkFilePath = String(link.FilePath);
-        links.push({
-          name: String(link.Name),
-          filePath: linkFilePath === 'unknown' ? '' : linkFilePath,
-          status: mapLinkStatus(Number(link.LinkStatus)),
-        });
+        $app = New-Object -ComObject '${progId}'
       } catch {
-        // Skip inaccessible links
+        Write-Error 'Not connected to InDesign'
+        exit 1
       }
     }
+    $docs = @()
+    for ($i = 0; $i -lt $app.Documents.Count; $i++) {
+      $doc = $app.Documents.Item($i + 1)
+      $docs += @{ name = $doc.Name; path = $doc.FilePath }
+    }
+    $docs | ConvertTo-Json -Depth 2
+  `;
 
-    return {
-      name: String(doc.Name),
-      path: filePath,
-      links,
-    };
-  } finally {
-    app.ScriptPreferences.UserInteractionLevel = originalLevel;
-  }
+  const result = await runPS(script);
+  if (!result) return [];
+  // PowerShell returns single object (not array) when count is 1
+  return Array.isArray(result) ? result : [result];
 }
 
-export function relinkAndSave(
+/**
+ * Get all links from a document. Opens the file if not already open.
+ */
+export async function getDocumentLinks(filePath: string): Promise<DocumentInfo> {
+  const progId = connectedProgId || 'InDesign.Application';
+  // Escape backslashes and quotes for PowerShell
+  const escapedPath = filePath.replace(/'/g, "''");
+
+  const script = `
+    try {
+      $app = [System.Runtime.InteropServices.Marshal]::GetActiveObject('${progId}')
+    } catch {
+      $app = New-Object -ComObject '${progId}'
+    }
+
+    # Suppress dialogs
+    $origLevel = $app.ScriptPreferences.UserInteractionLevel
+    $app.ScriptPreferences.UserInteractionLevel = 1852403060
+
+    try {
+      # Check if document is already open
+      $doc = $null
+      for ($i = 0; $i -lt $app.Documents.Count; $i++) {
+        $d = $app.Documents.Item($i + 1)
+        if ($d.FilePath -eq '${escapedPath}') {
+          $doc = $d
+          break
+        }
+      }
+
+      if (-not $doc) {
+        $doc = $app.Open('${escapedPath}', $true)
+      }
+
+      $links = @()
+      for ($i = 0; $i -lt $doc.Links.Count; $i++) {
+        try {
+          $link = $doc.Links.Item($i + 1)
+          $statusCode = [int]$link.Status
+          $status = switch ($statusCode) {
+            1852797549 { 'normal' }
+            1819242340 { 'out-of-date' }
+            1819109747 { 'missing' }
+            1282237028 { 'embedded' }
+            1818848865 { 'inaccessible' }
+            default { 'missing' }
+          }
+          $fp = "$($link.FilePath)"
+          if ($fp -eq 'unknown') { $fp = '' }
+          $links += @{
+            name = "$($link.Name)"
+            filePath = $fp
+            status = $status
+          }
+        } catch {
+          # Skip inaccessible links
+        }
+      }
+
+      @{
+        name = "$($doc.Name)"
+        path = '${escapedPath}'
+        links = $links
+      } | ConvertTo-Json -Depth 3
+    } finally {
+      $app.ScriptPreferences.UserInteractionLevel = $origLevel
+    }
+  `;
+
+  return await runPS(script);
+}
+
+/**
+ * Relink a specific link in a document and save.
+ */
+export async function relinkAndSave(
   filePath: string,
   linkName: string,
   newPath: string
-): void {
-  if (!app) throw new Error('Not connected to InDesign');
+): Promise<void> {
+  const progId = connectedProgId || 'InDesign.Application';
+  const escapedFilePath = filePath.replace(/'/g, "''");
+  const escapedLinkName = linkName.replace(/'/g, "''");
+  const escapedNewPath = newPath.replace(/'/g, "''");
 
-  const originalLevel = app.ScriptPreferences.UserInteractionLevel;
-  app.ScriptPreferences.UserInteractionLevel = INTERACTION_LEVEL.NEVER_INTERACT;
-
-  try {
-    // Find the document (may already be open)
-    let doc: any = null;
-    const count = app.Documents.Count;
-    for (let i = 0; i < count; i++) {
-      const d = app.Documents.Item(i);
-      if (String(d.FilePath).toLowerCase() === filePath.toLowerCase()) {
-        doc = d;
-        break;
-      }
-    }
-    if (!doc) {
-      doc = app.Open(filePath, true);
+  const script = `
+    try {
+      $app = [System.Runtime.InteropServices.Marshal]::GetActiveObject('${progId}')
+    } catch {
+      $app = New-Object -ComObject '${progId}'
     }
 
-    // Find and relink
-    const linkCount = doc.Links.Count;
-    for (let i = 0; i < linkCount; i++) {
-      const link = doc.Links.Item(i);
-      if (String(link.Name) === linkName) {
-        try {
-          const fso = ensureBridge().createObject('Scripting.FileSystemObject');
-          const fileObj = fso.GetFile(newPath);
-          link.Relink(fileObj);
-        } catch {
-          // Fallback: pass string path directly
-          link.Relink(newPath);
+    $origLevel = $app.ScriptPreferences.UserInteractionLevel
+    $app.ScriptPreferences.UserInteractionLevel = 1852403060
+
+    try {
+      # Find document
+      $doc = $null
+      for ($i = 0; $i -lt $app.Documents.Count; $i++) {
+        $d = $app.Documents.Item($i + 1)
+        if ($d.FilePath -eq '${escapedFilePath}') {
+          $doc = $d
+          break
         }
-        break;
       }
-    }
+      if (-not $doc) {
+        $doc = $app.Open('${escapedFilePath}', $true)
+      }
 
-    doc.Save();
-  } finally {
-    app.ScriptPreferences.UserInteractionLevel = originalLevel;
-  }
+      # Find and relink
+      for ($i = 0; $i -lt $doc.Links.Count; $i++) {
+        $link = $doc.Links.Item($i + 1)
+        if ("$($link.Name)" -eq '${escapedLinkName}') {
+          try {
+            $fso = New-Object -ComObject 'Scripting.FileSystemObject'
+            $fileObj = $fso.GetFile('${escapedNewPath}')
+            $link.Relink($fileObj)
+          } catch {
+            $link.Relink('${escapedNewPath}')
+          }
+          break
+        }
+      }
+
+      $doc.Save()
+      @{ success = $true } | ConvertTo-Json
+    } finally {
+      $app.ScriptPreferences.UserInteractionLevel = $origLevel
+    }
+  `;
+
+  await runPS(script);
 }
 
 export function disconnect(): void {
-  app = null;
+  connectedVersion = null;
+  connectedProgId = null;
 }
