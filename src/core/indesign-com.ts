@@ -49,7 +49,40 @@ async function runPS(script: string): Promise<any> {
 }
 
 /**
+ * Check if the connected InDesign version can open a file created in a given version.
+ * Returns compatibility info including whether it's safe to open.
+ */
+export function checkVersionCompatibility(
+  connectedVersion: string,
+  fileVersion: string
+): { compatible: boolean; message: string } {
+  const connectedMajor = parseInt(connectedVersion);
+  const fileMajor = parseInt(fileVersion);
+
+  if (isNaN(connectedMajor) || isNaN(fileMajor)) {
+    return { compatible: true, message: 'Could not determine version compatibility.' };
+  }
+
+  if (fileMajor > connectedMajor) {
+    return {
+      compatible: false,
+      message: `File version ${fileVersion} is newer than connected InDesign ${connectedVersion}. Cannot open without conversion dialog.`,
+    };
+  }
+
+  if (fileMajor < connectedMajor) {
+    return {
+      compatible: true,
+      message: `File will be upgraded from ${fileVersion} to ${connectedVersion}. This cannot be undone.`,
+    };
+  }
+
+  return { compatible: true, message: 'Versions match.' };
+}
+
+/**
  * Connect to InDesign and return version info.
+ * Sets UserInteractionLevel to neverInteract immediately after creating COM object.
  */
 export async function connect(version?: string): Promise<{ version: string; bridge: string }> {
   const progId = version ? `InDesign.Application.${version}` : 'InDesign.Application';
@@ -57,6 +90,7 @@ export async function connect(version?: string): Promise<{ version: string; brid
   const script = `
     try {
       $app = New-Object -ComObject '${progId}'
+      $app.ScriptPreferences.UserInteractionLevel = 1852403060
       $ver = $app.Version
       @{ version = "$ver"; progId = "${progId}" } | ConvertTo-Json
     } catch {
@@ -82,6 +116,10 @@ export function isConnected(): boolean {
   return connectedVersion !== null;
 }
 
+export function getConnectedVersion(): string | null {
+  return connectedVersion;
+}
+
 /**
  * Get list of currently open documents in InDesign.
  */
@@ -99,6 +137,7 @@ export async function getOpenDocuments(): Promise<{ name: string; path: string }
         exit 1
       }
     }
+    $app.ScriptPreferences.UserInteractionLevel = 1852403060
     $docs = @()
     for ($i = 0; $i -lt $app.Documents.Count; $i++) {
       $doc = $app.Documents.Item($i + 1)
@@ -115,11 +154,20 @@ export async function getOpenDocuments(): Promise<{ name: string; path: string }
 
 /**
  * Get all links from a document. Opens the file if not already open.
+ * Checks version compatibility BEFORE opening to prevent conversion dialogs.
  */
-export async function getDocumentLinks(filePath: string): Promise<DocumentInfo> {
+export async function getDocumentLinks(filePath: string, fileVersion?: string): Promise<DocumentInfo> {
   const progId = connectedProgId || 'InDesign.Application';
   // Escape backslashes and quotes for PowerShell
   const escapedPath = filePath.replace(/'/g, "''");
+
+  // Check version compatibility before opening
+  if (fileVersion && connectedVersion) {
+    const compat = checkVersionCompatibility(connectedVersion, fileVersion);
+    if (!compat.compatible) {
+      throw new Error(compat.message);
+    }
+  }
 
   const script = `
     try {
@@ -128,8 +176,7 @@ export async function getDocumentLinks(filePath: string): Promise<DocumentInfo> 
       $app = New-Object -ComObject '${progId}'
     }
 
-    # Suppress dialogs
-    $origLevel = $app.ScriptPreferences.UserInteractionLevel
+    # Suppress dialogs IMMEDIATELY before any document operations
     $app.ScriptPreferences.UserInteractionLevel = 1852403060
 
     try {
@@ -178,7 +225,8 @@ export async function getDocumentLinks(filePath: string): Promise<DocumentInfo> 
         links = $links
       } | ConvertTo-Json -Depth 3
     } finally {
-      $app.ScriptPreferences.UserInteractionLevel = $origLevel
+      # Restore default interaction level
+      $app.ScriptPreferences.UserInteractionLevel = 1699311169
     }
   `;
 
@@ -187,16 +235,26 @@ export async function getDocumentLinks(filePath: string): Promise<DocumentInfo> 
 
 /**
  * Relink a specific link in a document and save.
+ * Checks version compatibility BEFORE opening to prevent conversion dialogs.
  */
 export async function relinkAndSave(
   filePath: string,
   linkName: string,
-  newPath: string
+  newPath: string,
+  fileVersion?: string
 ): Promise<void> {
   const progId = connectedProgId || 'InDesign.Application';
   const escapedFilePath = filePath.replace(/'/g, "''");
   const escapedLinkName = linkName.replace(/'/g, "''");
   const escapedNewPath = newPath.replace(/'/g, "''");
+
+  // Check version compatibility before opening
+  if (fileVersion && connectedVersion) {
+    const compat = checkVersionCompatibility(connectedVersion, fileVersion);
+    if (!compat.compatible) {
+      throw new Error(compat.message);
+    }
+  }
 
   const script = `
     try {
@@ -205,7 +263,7 @@ export async function relinkAndSave(
       $app = New-Object -ComObject '${progId}'
     }
 
-    $origLevel = $app.ScriptPreferences.UserInteractionLevel
+    # Suppress dialogs IMMEDIATELY before any document operations
     $app.ScriptPreferences.UserInteractionLevel = 1852403060
 
     try {
@@ -240,7 +298,8 @@ export async function relinkAndSave(
       $doc.Save()
       @{ success = $true } | ConvertTo-Json
     } finally {
-      $app.ScriptPreferences.UserInteractionLevel = $origLevel
+      # Restore default interaction level
+      $app.ScriptPreferences.UserInteractionLevel = 1699311169
     }
   `;
 

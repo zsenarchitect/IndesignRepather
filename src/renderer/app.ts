@@ -236,6 +236,11 @@ export function setConnectedInDesignVersion(version: string | null) {
   connectedInDesignVersion = version;
 }
 
+export function setStatus(text: string) {
+  const el = document.getElementById('status-text');
+  if (el) el.textContent = text;
+}
+
 // ---------------------------------------------------------------------------
 // Initialization
 // ---------------------------------------------------------------------------

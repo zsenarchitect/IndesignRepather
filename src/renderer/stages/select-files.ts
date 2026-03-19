@@ -1,4 +1,4 @@
-import { setSelectedFiles, getSelectedFiles, setFileVersions, getFileVersions, setConnectedInDesignVersion, getConnectedInDesignVersion } from '../app';
+import { setSelectedFiles, getSelectedFiles, setFileVersions, getFileVersions, setConnectedInDesignVersion, getConnectedInDesignVersion, setStatus } from '../app';
 import type { InddVersionInfo } from '../../core/indd-version';
 import { createProgressBar } from '../components/progress';
 
@@ -60,7 +60,8 @@ function renderVersionWarning(container: HTMLElement) {
   const versionToYear: Record<number, string> = { 17: '2022', 18: '2023', 19: '2024', 20: '2025', 21: '2026' };
   const connectedYear = versionToYear[connectedMajor] || connectedVersion;
 
-  const mismatched: string[] = [];
+  const newerFiles: string[] = [];  // file version > connected version
+  const olderFiles: string[] = [];  // file version < connected version
   let unknownCount = 0;
   let allMatch = true;
 
@@ -69,19 +70,48 @@ function renderVersionWarning(container: HTMLElement) {
     if (!ver) {
       unknownCount++;
       allMatch = false;
-    } else if (ver.yearVersion !== connectedYear) {
-      mismatched.push(f);
-      allMatch = false;
+    } else {
+      const fileMajor = parseInt(ver.version);
+      if (fileMajor > connectedMajor) {
+        newerFiles.push(f);
+        allMatch = false;
+      } else if (fileMajor < connectedMajor) {
+        olderFiles.push(f);
+        allMatch = false;
+      }
     }
   }
 
   const warningEl = document.createElement('div');
   warningEl.id = 'version-warning-section';
 
-  if (mismatched.length > 0) {
-    // Group by year
+  // Files NEWER than connected InDesign — cannot open without conversion
+  if (newerFiles.length > 0) {
     const yearCounts: Record<string, number> = {};
-    for (const f of mismatched) {
+    for (const f of newerFiles) {
+      const ver = versions[f];
+      if (ver) {
+        yearCounts[ver.yearVersion] = (yearCounts[ver.yearVersion] || 0) + 1;
+      }
+    }
+    const newestFileYear = Object.keys(yearCounts).sort().pop() || 'unknown';
+    const yearSummary = Object.entries(yearCounts)
+      .map(([year, count]) => `${count} file${count === 1 ? '' : 's'} from InDesign ${year}`)
+      .join(', ');
+
+    warningEl.innerHTML += `
+      <div class="version-warning">
+        <strong>Blocked:</strong> ${yearSummary}.
+        These files were created in a newer InDesign version. They cannot be opened without conversion.
+        Use InDesign ${newestFileYear} or newer.
+      </div>
+    `;
+  }
+
+  // Files OLDER than connected InDesign — will be upgraded
+  if (olderFiles.length > 0) {
+    const yearCounts: Record<string, number> = {};
+    for (const f of olderFiles) {
       const ver = versions[f];
       if (ver) {
         yearCounts[ver.yearVersion] = (yearCounts[ver.yearVersion] || 0) + 1;
@@ -91,14 +121,15 @@ function renderVersionWarning(container: HTMLElement) {
       .map(([year, count]) => `${count} file${count === 1 ? '' : 's'} from InDesign ${year}`)
       .join(', ');
 
-    warningEl.innerHTML = `
+    warningEl.innerHTML += `
       <div class="version-warning">
-        <strong>Warning:</strong> You are connected to InDesign ${connectedYear}, but ${yearSummary}.
-        Opening and saving these files will upgrade them to ${connectedYear} format.
-        This cannot be undone. Proceed only if this is intentional.
+        <strong>Warning:</strong> ${yearSummary}.
+        Opening in InDesign ${connectedYear} will upgrade these files. This cannot be undone.
       </div>
     `;
-  } else if (allMatch) {
+  }
+
+  if (allMatch) {
     warningEl.innerHTML = `
       <div class="version-ok">
         Version match -- safe to proceed. All files match InDesign ${connectedYear}.
@@ -106,7 +137,7 @@ function renderVersionWarning(container: HTMLElement) {
     `;
   }
 
-  if (unknownCount > 0 && mismatched.length === 0) {
+  if (unknownCount > 0 && newerFiles.length === 0 && olderFiles.length === 0) {
     warningEl.innerHTML += `
       <div class="version-unknown">
         Version could not be detected for ${unknownCount} file${unknownCount === 1 ? '' : 's'}.
@@ -128,6 +159,7 @@ export function init(container: HTMLElement) {
       <div class="connection-controls">
         <select id="indesign-version" class="version-select">
           <option value="">Detect Automatically</option>
+          <option value="2026">InDesign 2026</option>
           <option value="2025">InDesign 2025</option>
           <option value="2024">InDesign 2024</option>
           <option value="2023">InDesign 2023</option>
@@ -245,11 +277,13 @@ export function init(container: HTMLElement) {
     connectProgress.setIndeterminate('Connecting to InDesign...');
     connectBtn.disabled = true;
 
+    setStatus('Connecting to InDesign...');
     const result = await window.api.connectInDesign(version);
     if (result.data) {
       connectProgress.hide();
       setConnStatus('connected', `Connected (InDesign ${result.data.version})`);
       setConnectedInDesignVersion(result.data.version);
+      setStatus(`Connected to InDesign ${result.data.version}`);
       renderVersionWarning(container);
       connectBtn.disabled = false;
     } else if (result.error) {
@@ -282,6 +316,7 @@ export function init(container: HTMLElement) {
       }
       connectProgress.hide();
       connectBtn.disabled = false;
+      setStatus('Ready');
     }
   });
 
@@ -298,6 +333,7 @@ export function init(container: HTMLElement) {
 
   async function handleFilesSelected(files: string[]) {
     setSelectedFiles(files);
+    setStatus(`${files.length} file${files.length === 1 ? '' : 's'} selected`);
     renderFileList(container, files);
     detectAndShowVersions(files);
     // Link summary requires InDesign COM — don't block on it
@@ -315,6 +351,7 @@ export function init(container: HTMLElement) {
   // Pick folder
   container.querySelector('#opt-pick-folder')?.addEventListener('click', async () => {
     summaryEl.textContent = '';
+    setStatus('Scanning...');
     scanProgress.setIndeterminate('Scanning folder for .indd files...');
     folderScanCallback = (data) => {
       scanProgress.setIndeterminate(`Scanning... ${data.found} file${data.found === 1 ? '' : 's'} found`);
