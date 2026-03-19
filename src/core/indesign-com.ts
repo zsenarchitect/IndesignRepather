@@ -137,7 +137,7 @@ if (-not $app) {
     exit 1
 }
 
-$app.ScriptPreferences.UserInteractionLevel = 1852403060
+try { $app.ScriptPreferences.UserInteractionLevel = 1852403060 } catch { try { $app.DoScript("app.scriptPreferences.userInteractionLevel = UserInteractionLevels.NEVER_INTERACT;", 1246973031) } catch {} }
 $ver = $app.Version
 @{ version = "$ver"; progId = $usedProgId } | ConvertTo-Json
 `;
@@ -173,7 +173,7 @@ export async function getOpenDocuments(): Promise<{ name: string; path: string }
         exit 1
       }
     }
-    $app.ScriptPreferences.UserInteractionLevel = 1852403060
+    try { $app.ScriptPreferences.UserInteractionLevel = 1852403060 } catch { try { $app.DoScript("app.scriptPreferences.userInteractionLevel = UserInteractionLevels.NEVER_INTERACT;", 1246973031) } catch {} }
     $docs = @()
     for ($i = 0; $i -lt $app.Documents.Count; $i++) {
       $doc = $app.Documents.Item($i + 1)
@@ -213,7 +213,7 @@ export async function getDocumentLinks(filePath: string, fileVersion?: string): 
     }
 
     # Suppress dialogs IMMEDIATELY before any document operations
-    $app.ScriptPreferences.UserInteractionLevel = 1852403060
+    try { $app.ScriptPreferences.UserInteractionLevel = 1852403060 } catch { try { $app.DoScript("app.scriptPreferences.userInteractionLevel = UserInteractionLevels.NEVER_INTERACT;", 1246973031) } catch {} }
 
     try {
       # Check if document is already open
@@ -262,7 +262,7 @@ export async function getDocumentLinks(filePath: string, fileVersion?: string): 
       } | ConvertTo-Json -Depth 3
     } finally {
       # Restore default interaction level
-      $app.ScriptPreferences.UserInteractionLevel = 1699311169
+      try { $app.ScriptPreferences.UserInteractionLevel = 1699311169 } catch { try { $app.DoScript("app.scriptPreferences.userInteractionLevel = UserInteractionLevels.INTERACT_WITH_ALL;", 1246973031) } catch {} }
     }
   `;
 
@@ -300,7 +300,7 @@ export async function relinkAndSave(
     }
 
     # Suppress dialogs IMMEDIATELY before any document operations
-    $app.ScriptPreferences.UserInteractionLevel = 1852403060
+    try { $app.ScriptPreferences.UserInteractionLevel = 1852403060 } catch { try { $app.DoScript("app.scriptPreferences.userInteractionLevel = UserInteractionLevels.NEVER_INTERACT;", 1246973031) } catch {} }
 
     try {
       # Find document
@@ -335,7 +335,7 @@ export async function relinkAndSave(
       @{ success = $true } | ConvertTo-Json
     } finally {
       # Restore default interaction level
-      $app.ScriptPreferences.UserInteractionLevel = 1699311169
+      try { $app.ScriptPreferences.UserInteractionLevel = 1699311169 } catch { try { $app.DoScript("app.scriptPreferences.userInteractionLevel = UserInteractionLevels.INTERACT_WITH_ALL;", 1246973031) } catch {} }
     }
   `;
 
