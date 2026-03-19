@@ -1,10 +1,16 @@
 import type { Mapping, DocumentInfo, RepathResult, ProgressUpdate } from '../shared/types';
+import { init as initSelectFiles } from './stages/select-files';
+import { init as initDiscover } from './stages/discover';
+import { init as initDefineRules } from './stages/define-rules';
+import { init as initPreview } from './stages/preview';
+import { init as initExecute } from './stages/execute';
 
 declare global {
   interface Window {
     api: {
       selectFiles: () => Promise<string[]>;
       selectFolder: () => Promise<string[]>;
+      selectFolderPath: () => Promise<string | null>;
       getOpenDocuments: () => Promise<{ name: string; path: string }[]>;
       analyzeLinks: (filePaths: string[]) => Promise<DocumentInfo[]>;
       discoverMappings: (
@@ -41,6 +47,29 @@ let previewResults: DocumentInfo[] = [];
 // ---------------------------------------------------------------------------
 // Stage navigation
 // ---------------------------------------------------------------------------
+function initStage(stage: number) {
+  const container = document.getElementById(`stage-${stage}`);
+  if (!container) return;
+
+  switch (stage) {
+    case 1:
+      initSelectFiles(container);
+      break;
+    case 2:
+      initDiscover(container);
+      break;
+    case 3:
+      initDefineRules(container);
+      break;
+    case 4:
+      initPreview(container);
+      break;
+    case 5:
+      initExecute(container);
+      break;
+  }
+}
+
 function showStage(stage: number) {
   currentStage = stage;
 
@@ -53,6 +82,9 @@ function showStage(stage: number) {
     el.classList.toggle('active', i + 1 === stage);
     el.classList.toggle('completed', i + 1 < stage);
   });
+
+  // Init stage content
+  initStage(stage);
 
   // Update buttons
   const backBtn = document.getElementById('btn-back') as HTMLButtonElement;
@@ -185,7 +217,10 @@ window.api?.getAppVersion().then((v: string) => {
   if (el) el.textContent = `v${v}`;
 });
 
+// Listen for reset-session from execute stage "New Session" button
+document.addEventListener('reset-session', () => {
+  showStage(1);
+});
+
 // Start at stage 1
 showStage(1);
-
-export {};

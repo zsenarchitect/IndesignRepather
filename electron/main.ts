@@ -110,6 +110,13 @@ ipcMain.handle('select-folder', async () => {
   return findInddFiles(result.filePaths[0]);
 });
 
+ipcMain.handle('select-folder-path', async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    properties: ['openDirectory'],
+  });
+  return result.filePaths[0] || null;
+});
+
 // InDesign COM ------------------------------------------------------------
 ipcMain.handle('get-open-documents', () => {
   com.connect();

@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld('api', {
   loadSearchRoots: () => ipcRenderer.invoke('load-search-roots'),
   saveSearchRoots: (roots: string[]) => ipcRenderer.invoke('save-search-roots', roots),
 
+  // Folder path (returns directory path, not .indd files)
+  selectFolderPath: () => ipcRenderer.invoke('select-folder-path'),
+
   // Utilities
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getThumbnail: (filePath: string) => ipcRenderer.invoke('get-thumbnail', filePath),
