@@ -85,33 +85,55 @@ export function checkVersionCompatibility(
  * Sets UserInteractionLevel to neverInteract immediately after creating COM object.
  */
 export async function connect(_version?: string): Promise<{ version: string; bridge: string }> {
-  // Always use generic ProgID — connects to whichever InDesign is running.
-  // Version-specific ProgIDs like "InDesign.Application.2026" don't exist.
-  // The version dropdown is only used for mismatch warnings, not COM connection.
-  const progId = 'InDesign.Application';
-
+  // Try version-specific ProgIDs newest first, then generic fallback.
+  // Registry confirms both InDesign.Application.2026 and .2025 exist.
   const script = `
     $app = $null
-    # Method 1: GetActiveObject (works if InDesign registered in ROT)
+    $usedProgId = ''
+
+    # Scan registry for all InDesign.Application.YYYY ProgIDs, try newest first
+    $progIds = @()
     try {
-      $app = [System.Runtime.InteropServices.Marshal]::GetActiveObject('${progId}')
+      $progIds = Get-ChildItem 'HKLM:\\SOFTWARE\\Classes' -ErrorAction SilentlyContinue |
+        Where-Object { $_.PSChildName -match '^InDesign\\.Application\\.\\d{4}$' } |
+        ForEach-Object { $_.PSChildName } |
+        Sort-Object -Descending
     } catch {}
 
-    # Method 2: New-Object attaches to running instance if one exists
-    # (InDesign 2026+ may not register in ROT but New-Object still connects)
-    if (-not $app) {
+    # Add generic fallback
+    $progIds += 'InDesign.Application'
+
+    foreach ($progId in $progIds) {
+      # Try GetActiveObject first (attaches to running instance)
       try {
-        $app = New-Object -ComObject '${progId}'
-      } catch {
-        Write-Error 'InDesign is not running. Please launch InDesign first.'
-        exit 1
+        $app = [System.Runtime.InteropServices.Marshal]::GetActiveObject($progId)
+        $usedProgId = $progId
+        break
+      } catch {}
+    }
+
+    if (-not $app) {
+      # Try New-Object with newest ProgID (connects to running or creates)
+      foreach ($progId in $progIds) {
+        try {
+          $app = New-Object -ComObject $progId
+          if ($app -and $app.Version) {
+            $usedProgId = $progId
+            break
+          }
+        } catch {}
       }
+    }
+
+    if (-not $app) {
+      Write-Error 'InDesign is not running. Please launch InDesign first.'
+      exit 1
     }
 
     try {
       $app.ScriptPreferences.UserInteractionLevel = 1852403060
       $ver = $app.Version
-      @{ version = "$ver"; progId = "${progId}" } | ConvertTo-Json
+      @{ version = "$ver"; progId = $usedProgId } | ConvertTo-Json
     } catch {
       Write-Error "Connected but failed to read version: $($_.Exception.Message)"
       exit 1
