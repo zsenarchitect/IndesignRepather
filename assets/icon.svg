@@ -1,15 +1,46 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <!-- Two chain links being reconnected — monochrome white on transparent -->
-  <g fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Left link (complete oval) -->
-    <rect x="36" y="80" width="80" height="96" rx="40" ry="48"/>
-    <!-- Right link (complete oval) -->
-    <rect x="140" y="80" width="80" height="96" rx="40" ry="48"/>
-    <!-- Overlap region — connecting bar top -->
-    <line x1="116" y1="104" x2="140" y2="104"/>
-    <!-- Connecting bar bottom -->
-    <line x1="116" y1="152" x2="140" y2="152"/>
-    <!-- Repair spark/arrow — small chevron indicating reconnection -->
-    <polyline points="120,128 132,118 132,138" stroke-width="8"/>
+  <!--
+    InDesign Repather icon
+    Concept: A broken file path being reconnected — two path segments
+    with a directional arrow showing the repath action.
+    Clean, geometric, architectural style.
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2a2a2a"/>
+      <stop offset="100%" stop-color="#1a1a1a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="url(#bg)" stroke="#444" stroke-width="2"/>
+
+  <!-- Left path segment (broken/old) — faded -->
+  <g fill="none" stroke="#666" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Folder shape -->
+    <path d="M44,100 L44,176 Q44,184 52,184 L96,184 Q104,184 104,176 L104,108 Q104,100 96,100 L76,100 L70,88 Q68,84 64,84 L52,84 Q44,84 44,92 Z"/>
+    <!-- Broken link line coming out -->
+    <line x1="104" y1="142" x2="124" y2="142" stroke-dasharray="6,4"/>
+  </g>
+
+  <!-- Right path segment (new/connected) — bright -->
+  <g fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Folder shape -->
+    <path d="M152,100 L152,176 Q152,184 160,184 L204,184 Q212,184 212,176 L212,108 Q212,100 204,100 L184,100 L178,88 Q176,84 172,84 L160,84 Q152,84 152,92 Z"/>
+    <!-- Connected link line coming in -->
+    <line x1="132" y1="142" x2="152" y2="142"/>
+  </g>
+
+  <!-- Repath arrow — the core action -->
+  <g fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Curved arrow from old to new -->
+    <path d="M80,70 Q128,40 176,70"/>
+    <!-- Arrowhead -->
+    <polyline points="166,58 176,70 164,78"/>
+  </g>
+
+  <!-- Small checkmark on right folder -->
+  <g fill="none" stroke="#4caf50" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="168,148 178,158 196,136"/>
   </g>
 </svg>
