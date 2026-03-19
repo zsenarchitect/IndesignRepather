@@ -154,16 +154,31 @@ ipcMain.handle('connect-indesign', async (_event, version?: string) => {
 
 ipcMain.handle('launch-indesign', async () => {
   const { exec } = require('child_process');
-  const { existsSync } = require('fs');
-  const paths = [
-    'C:\\Program Files\\Adobe\\Adobe InDesign 2025\\InDesign.exe',
-    'C:\\Program Files\\Adobe\\Adobe InDesign 2024\\InDesign.exe',
-    'C:\\Program Files\\Adobe\\Adobe InDesign 2023\\InDesign.exe',
-    'C:\\Program Files\\Adobe\\Adobe InDesign CC 2022\\InDesign.exe',
-  ];
+  const { existsSync, readdirSync } = require('fs');
 
-  const found = paths.find((p: string) => existsSync(p));
-  if (!found) return { error: 'InDesign not found. Please launch it manually.' };
+  // Dynamically find all installed InDesign versions, pick the latest
+  const adobeDir = 'C:\\Program Files\\Adobe';
+  let found: string | null = null;
+
+  try {
+    const entries = readdirSync(adobeDir);
+    const indesignDirs = entries
+      .filter((e: string) => /Adobe InDesign/i.test(e))
+      .sort()
+      .reverse(); // Latest year first
+
+    for (const dir of indesignDirs) {
+      const exePath = join(adobeDir, dir, 'InDesign.exe');
+      if (existsSync(exePath)) {
+        found = exePath;
+        break;
+      }
+    }
+  } catch {
+    // Adobe dir doesn't exist
+  }
+
+  if (!found) return { error: 'InDesign not found in Program Files. Please launch it manually.' };
 
   exec(`"${found}"`);
   // Wait for InDesign to initialize
