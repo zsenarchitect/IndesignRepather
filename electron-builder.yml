@@ -9,7 +9,7 @@ files:
 forceCodeSigning: false
 win:
   target: nsis
-  icon: assets/icon.svg
+  icon: assets/icon.png
   signAndEditExecutable: false
 nsis:
   oneClick: true

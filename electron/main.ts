@@ -51,7 +51,7 @@ function createWindow() {
     height: saved?.height ?? 700,
     x: saved?.x,
     y: saved?.y,
-    icon: join(__dirname, '../../assets/icon.svg'),
+    icon: join(__dirname, '../../assets/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
