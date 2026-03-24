@@ -45,6 +45,11 @@ export default function RootLayout({
         <main style={{ maxWidth: 800, margin: '0 auto', padding: '40px 24px' }}>
           {children}
         </main>
+        <footer style={{ borderTop: '1px solid #333', padding: '16px 32px', textAlign: 'center' }}>
+          <a href="https://enneadtab.com" style={{ color: '#888', textDecoration: 'none', fontSize: '13px' }}>
+            EnneadTab Home
+          </a>
+        </footer>
       </body>
     </html>
   );
