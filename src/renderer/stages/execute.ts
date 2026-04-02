@@ -1,4 +1,4 @@
-import { getSelectedFiles, getMappings, setSelectedFiles, setMappings, setPreviewResults, getFileVersions, getConnectedInDesignVersion } from '../app';
+import { getSelectedFiles, getMappings, setSelectedFiles, setPreviewResults, getFileVersions, getConnectedInDesignVersion } from '../app';
 import type { RepathResult, ProgressUpdate } from '../../shared/types';
 
 function basename(filePath: string): string {
@@ -56,8 +56,9 @@ export async function init(container: HTMLElement) {
 
     <div id="exec-summary" class="hidden"></div>
 
-    <div id="exec-actions" class="hidden" style="margin-top:16px;">
+    <div id="exec-actions" class="hidden" style="margin-top:16px;display:flex;gap:8px;">
       <button id="btn-new-session">New Session</button>
+      <button id="btn-export-report" style="font-size:12px;">Export Report</button>
     </div>
   `;
 
@@ -130,7 +131,7 @@ export async function init(container: HTMLElement) {
   // Execute
   let results: RepathResult[];
   try {
-    results = await window.api.executeRepath(files, mappings);
+    results = await window.api.executeRepath(files, mappings, fileVersionData);
   } catch (err) {
     overallLabel.textContent = 'Execution failed';
     overallPct.textContent = '';
@@ -142,7 +143,7 @@ export async function init(container: HTMLElement) {
     `;
     summaryEl.classList.remove('hidden');
     actionsEl.classList.remove('hidden');
-    attachNewSession(container, actionsEl);
+    attachActions(container, actionsEl, []);
     return;
   }
 
@@ -223,14 +224,33 @@ export async function init(container: HTMLElement) {
   }
 }
 
-function attachNewSession(container: HTMLElement, actionsEl: HTMLElement) {
+function attachActions(container: HTMLElement, actionsEl: HTMLElement, results: RepathResult[]) {
   actionsEl.querySelector('#btn-new-session')?.addEventListener('click', () => {
     setSelectedFiles([]);
-    setMappings([]);
+    // 2026-04-01: Keep mappings intact — users expect rules to survive across sessions.
+    // Mappings persist via electron-store and should only be cleared explicitly in Stage 3.
     setPreviewResults([]);
 
-    // Navigate to stage 1 by clicking back until we're there
-    // Use the showStage approach — dispatch a custom event
     container.dispatchEvent(new CustomEvent('reset-session', { bubbles: true }));
+  });
+
+  actionsEl.querySelector('#btn-export-report')?.addEventListener('click', () => {
+    const report = {
+      timestamp: new Date().toISOString(),
+      summary: {
+        totalFiles: results.length,
+        totalRepathed: results.reduce((s, r) => s + r.repathedLinks, 0),
+        totalFailed: results.reduce((s, r) => s + r.failedLinks, 0),
+        totalErrors: results.reduce((s, r) => s + r.errors.length, 0),
+      },
+      files: results.map((r) => ({
+        document: r.document,
+        totalLinks: r.totalLinks,
+        repathedLinks: r.repathedLinks,
+        failedLinks: r.failedLinks,
+        errors: r.errors,
+      })),
+    };
+    window.api.exportRules(JSON.stringify(report, null, 2));
   });
 }

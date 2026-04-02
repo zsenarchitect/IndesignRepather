@@ -46,7 +46,7 @@ export async function dismissDialogs(): Promise<number> {
  * Execute a PowerShell script and return parsed JSON output.
  * Uses temp file + -File flag to avoid command-line escaping issues.
  */
-async function runPS(script: string): Promise<any> {
+async function runPS(script: string, timeoutMs = 120_000): Promise<any> {
   const { writeFile, unlink } = await import('fs/promises');
   const { tmpdir } = await import('os');
   const { join: joinPath } = await import('path');
@@ -61,7 +61,7 @@ async function runPS(script: string): Promise<any> {
       '-ExecutionPolicy', 'Bypass',
       '-File', tmpFile,
     ], {
-      timeout: 60000,
+      timeout: timeoutMs,
       maxBuffer: 10 * 1024 * 1024,
       windowsHide: true,
     });
@@ -215,8 +215,6 @@ export async function getOpenDocuments(): Promise<{ name: string; path: string }
  */
 export async function getDocumentLinks(filePath: string, fileVersion?: string): Promise<DocumentInfo> {
   const progId = connectedProgId || 'InDesign.Application';
-  // Escape backslashes and quotes for PowerShell
-  const escapedPath = filePath.replace(/'/g, "''");
 
   // Check version compatibility before opening
   if (fileVersion && connectedVersion) {
@@ -226,7 +224,12 @@ export async function getDocumentLinks(filePath: string, fileVersion?: string): 
     }
   }
 
+  // Use PowerShell here-strings (@'...'@) for paths — no interpolation of $, backticks, etc.
   const script = `
+$filePath = @'
+${filePath}
+'@
+
     try {
       $app = [System.Runtime.InteropServices.Marshal]::GetActiveObject('${progId}')
     } catch {
@@ -237,18 +240,18 @@ export async function getDocumentLinks(filePath: string, fileVersion?: string): 
     try { $app.ScriptPreferences.UserInteractionLevel = 1852403060 } catch { try { $app.DoScript("app.scriptPreferences.userInteractionLevel = UserInteractionLevels.NEVER_INTERACT;", 1246973031) } catch {} }
 
     try {
-      # Check if document is already open
+      # Check if document is already open (case-insensitive)
       $doc = $null
       for ($i = 0; $i -lt $app.Documents.Count; $i++) {
         $d = $app.Documents.Item($i + 1)
-        if ($d.FilePath -eq '${escapedPath}') {
+        if ($d.FilePath -ieq $filePath) {
           $doc = $d
           break
         }
       }
 
       if (-not $doc) {
-        $doc = $app.Open('${escapedPath}', $true)
+        $doc = $app.Open($filePath, $true)
       }
 
       $links = @()
@@ -278,7 +281,7 @@ export async function getDocumentLinks(filePath: string, fileVersion?: string): 
 
       @{
         name = "$($doc.Name)"
-        path = '${escapedPath}'
+        path = $filePath
         links = $links
       } | ConvertTo-Json -Depth 3
     } finally {
@@ -291,19 +294,17 @@ export async function getDocumentLinks(filePath: string, fileVersion?: string): 
 }
 
 /**
- * Relink a specific link in a document and save.
+ * Relink multiple links in a document and save once.
+ * Accepts an array of {linkName, newPath} pairs to batch all relinks into one
+ * PowerShell process, saving once at the end instead of per-link.
  * Checks version compatibility BEFORE opening to prevent conversion dialogs.
  */
 export async function relinkAndSave(
   filePath: string,
-  linkName: string,
-  newPath: string,
+  links: { linkName: string; newPath: string }[],
   fileVersion?: string
-): Promise<void> {
+): Promise<{ relinked: number; failed: string[] }> {
   const progId = connectedProgId || 'InDesign.Application';
-  const escapedFilePath = filePath.replace(/'/g, "''");
-  const escapedLinkName = linkName.replace(/'/g, "''");
-  const escapedNewPath = newPath.replace(/'/g, "''");
 
   // Check version compatibility before opening
   if (fileVersion && connectedVersion) {
@@ -313,7 +314,21 @@ export async function relinkAndSave(
     }
   }
 
+  // Build a JSON array of link operations, passed as a here-string to avoid
+  // any PowerShell interpolation of $, backticks, etc. in file paths.
+  const linksJson = JSON.stringify(links);
+
   const script = `
+$filePath = @'
+${filePath}
+'@
+
+$linksJson = @'
+${linksJson}
+'@
+
+$linkOps = $linksJson | ConvertFrom-Json
+
     try {
       $app = [System.Runtime.InteropServices.Marshal]::GetActiveObject('${progId}')
     } catch {
@@ -324,43 +339,80 @@ export async function relinkAndSave(
     try { $app.ScriptPreferences.UserInteractionLevel = 1852403060 } catch { try { $app.DoScript("app.scriptPreferences.userInteractionLevel = UserInteractionLevels.NEVER_INTERACT;", 1246973031) } catch {} }
 
     try {
-      # Find document
+      # Find document (case-insensitive)
       $doc = $null
       for ($i = 0; $i -lt $app.Documents.Count; $i++) {
         $d = $app.Documents.Item($i + 1)
-        if ($d.FilePath -eq '${escapedFilePath}') {
+        if ($d.FilePath -ieq $filePath) {
           $doc = $d
           break
         }
       }
       if (-not $doc) {
-        $doc = $app.Open('${escapedFilePath}', $true)
+        $doc = $app.Open($filePath, $true)
       }
 
-      # Find and relink
-      for ($i = 0; $i -lt $doc.Links.Count; $i++) {
-        $link = $doc.Links.Item($i + 1)
-        if ("$($link.Name)" -eq '${escapedLinkName}') {
-          try {
-            $fso = New-Object -ComObject 'Scripting.FileSystemObject'
-            $fileObj = $fso.GetFile('${escapedNewPath}')
-            $link.Relink($fileObj)
-          } catch {
-            $link.Relink('${escapedNewPath}')
+      $relinked = 0
+      $failed = @()
+
+      foreach ($op in $linkOps) {
+        $found = $false
+        for ($i = 0; $i -lt $doc.Links.Count; $i++) {
+          $link = $doc.Links.Item($i + 1)
+          if ("$($link.Name)" -eq $op.linkName) {
+            try {
+              try {
+                $fso = New-Object -ComObject 'Scripting.FileSystemObject'
+                $fileObj = $fso.GetFile($op.newPath)
+                $link.Relink($fileObj)
+              } catch {
+                $link.Relink($op.newPath)
+              }
+              $relinked++
+            } catch {
+              $failed += "$($op.linkName): $($_.Exception.Message)"
+            }
+            $found = $true
+            break
           }
-          break
+        }
+        if (-not $found) {
+          $failed += "$($op.linkName): link not found in document"
         }
       }
 
       $doc.Save()
-      @{ success = $true } | ConvertTo-Json
+      @{ relinked = $relinked; failed = $failed } | ConvertTo-Json -Depth 2
     } finally {
       # Restore default interaction level
       try { $app.ScriptPreferences.UserInteractionLevel = 1699311169 } catch { try { $app.DoScript("app.scriptPreferences.userInteractionLevel = UserInteractionLevels.INTERACT_WITH_ALL;", 1246973031) } catch {} }
     }
   `;
 
-  await runPS(script);
+  return await runPS(script);
+}
+
+/**
+ * Reset InDesign's UserInteractionLevel to INTERACT_WITH_ALL.
+ * Call this after a failed COM operation to ensure InDesign isn't stuck
+ * in non-interactive mode (e.g. if a timeout killed the process mid-operation).
+ */
+export async function resetInteractionLevel(): Promise<void> {
+  const progId = connectedProgId || 'InDesign.Application';
+  const script = `
+    try {
+      $app = [System.Runtime.InteropServices.Marshal]::GetActiveObject('${progId}')
+      try { $app.ScriptPreferences.UserInteractionLevel = 1699311169 } catch { try { $app.DoScript("app.scriptPreferences.userInteractionLevel = UserInteractionLevels.INTERACT_WITH_ALL;", 1246973031) } catch {} }
+      @{ reset = $true } | ConvertTo-Json
+    } catch {
+      @{ reset = $false; error = $_.Exception.Message } | ConvertTo-Json
+    }
+  `;
+  try {
+    await runPS(script, 10_000);
+  } catch {
+    // Best-effort — if this fails, InDesign may need manual restart
+  }
 }
 
 export function disconnect(): void {

@@ -19,3 +19,6 @@ nsis:
 asar: true
 publish:
   provider: github
+  owner: zsenarchitect
+  repo: IndesignRepather
+  releaseType: release

@@ -1,8 +1,9 @@
 import { app, BrowserWindow, ipcMain, dialog, nativeImage } from 'electron';
 import { join } from 'path';
 import { readdir } from 'fs/promises';
-import * as Sentry from '@sentry/electron/main';
 import { autoUpdater } from 'electron-updater';
+import { reportError } from '../src/shared/error-reporter';
+import type { ErrorReportOpts } from '../src/shared/error-reporter';
 import Store from 'electron-store';
 import * as com from '../src/core/indesign-com';
 import { previewRepath, checkNewPathsExist } from '../src/core/link-analyzer';
@@ -12,9 +13,27 @@ import { detectMultipleVersions } from '../src/core/indd-version';
 import type { Mapping } from '../src/shared/types';
 
 // ---------------------------------------------------------------------------
-// Sentry error reporting
+// Global error handlers — report to ErrorDump
 // ---------------------------------------------------------------------------
-Sentry.init({ dsn: process.env.SENTRY_DSN || '' });
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+  reportError({
+    error_message: error.message,
+    stack_trace: error.stack,
+    function_name: 'main:uncaughtException',
+  });
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack : undefined;
+  reportError({
+    error_message: msg,
+    stack_trace: stack,
+    function_name: 'main:unhandledRejection',
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Persistent settings
@@ -116,7 +135,8 @@ async function findInddFiles(
 
 // File selection ----------------------------------------------------------
 ipcMain.handle('select-files', async () => {
-  const result = await dialog.showOpenDialog(mainWindow!, {
+  if (!mainWindow) return [];
+  const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Select InDesign Documents',
     filters: [{ name: 'InDesign Documents', extensions: ['indd'] }],
     properties: ['openFile', 'multiSelections'],
@@ -125,7 +145,8 @@ ipcMain.handle('select-files', async () => {
 });
 
 ipcMain.handle('select-folder', async () => {
-  const result = await dialog.showOpenDialog(mainWindow!, {
+  if (!mainWindow) return [];
+  const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Select Folder Containing InDesign Documents',
     properties: ['openDirectory'],
   });
@@ -136,7 +157,8 @@ ipcMain.handle('select-folder', async () => {
 });
 
 ipcMain.handle('select-folder-path', async () => {
-  const result = await dialog.showOpenDialog(mainWindow!, {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory'],
   });
   return result.filePaths[0] || null;
@@ -259,9 +281,9 @@ ipcMain.handle(
 
 ipcMain.handle(
   'execute-repath',
-  async (_event, filePaths: string[], mappings: Mapping[]) => {
+  async (_event, filePaths: string[], mappings: Mapping[], fileVersions?: Record<string, { version: string } | null>) => {
     try {
-      com.connect();
+      await com.connect();
       const results = await executeRepath(filePaths, mappings, (update) => {
         mainWindow?.webContents.send('repath-progress', update);
         // Update taskbar progress
@@ -269,7 +291,7 @@ ipcMain.handle(
           const progress = (update.currentFileIndex + 1) / update.totalFiles;
           mainWindow.setProgressBar(progress);
         }
-      });
+      }, fileVersions);
       // Clear taskbar progress when done
       mainWindow?.setProgressBar(-1);
       return { data: results };
@@ -293,7 +315,8 @@ ipcMain.handle('save-search-roots', (_event, roots: string[]) => {
 
 // Export/Import rules -----------------------------------------------------
 ipcMain.handle('export-rules', async (_event, data: string) => {
-  const result = await dialog.showSaveDialog(mainWindow!, {
+  if (!mainWindow) return;
+  const result = await dialog.showSaveDialog(mainWindow, {
     filters: [{ name: 'JSON', extensions: ['json'] }],
     defaultPath: 'indesign-repather-rules.json',
   });
@@ -304,7 +327,8 @@ ipcMain.handle('export-rules', async (_event, data: string) => {
 });
 
 ipcMain.handle('import-rules', async () => {
-  const result = await dialog.showOpenDialog(mainWindow!, {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
     filters: [{ name: 'JSON', extensions: ['json'] }],
     properties: ['openFile'],
   });
@@ -322,6 +346,11 @@ ipcMain.handle('detect-file-versions', async (_event, filePaths: string[]) => {
     obj[path] = info;
   }
   return { data: obj };
+});
+
+// Error reporting (renderer → main → ErrorDump) --------------------------
+ipcMain.handle('report-error', (_event, opts: ErrorReportOpts) => {
+  reportError({ ...opts, context: { ...opts.context, source: 'renderer' } });
 });
 
 // Utilities ---------------------------------------------------------------
@@ -344,6 +373,14 @@ app.whenReady().then(() => {
 
   // Auto-updater
   autoUpdater.checkForUpdatesAndNotify();
+
+  autoUpdater.on('error', (error) => {
+    reportError({
+      error_message: error.message,
+      stack_trace: error.stack,
+      function_name: 'autoUpdater:error',
+    });
+  });
 
   autoUpdater.on('update-downloaded', () => {
     if (!mainWindow) return;

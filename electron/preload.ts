@@ -33,8 +33,8 @@ contextBridge.exposeInMainWorld('api', {
     if (result?.error) throw new Error(result.error);
     return result?.data ?? result;
   },
-  executeRepath: async (filePaths: string[], mappings: { oldPath: string; newPath: string }[]) => {
-    const result = await ipcRenderer.invoke('execute-repath', filePaths, mappings);
+  executeRepath: async (filePaths: string[], mappings: { oldPath: string; newPath: string }[], fileVersions?: Record<string, { version: string } | null>) => {
+    const result = await ipcRenderer.invoke('execute-repath', filePaths, mappings, fileVersions);
     if (result?.error) throw new Error(result.error);
     return result?.data ?? result;
   },
@@ -73,4 +73,8 @@ contextBridge.exposeInMainWorld('api', {
   // Utilities
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getThumbnail: (filePath: string) => ipcRenderer.invoke('get-thumbnail', filePath),
+
+  // Error reporting (renderer → main → ErrorDump)
+  reportError: (opts: { error_message: string; stack_trace?: string; function_name?: string; context?: Record<string, unknown> }) =>
+    ipcRenderer.invoke('report-error', opts),
 });

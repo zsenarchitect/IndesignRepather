@@ -1,4 +1,4 @@
-import { getSelectedFiles, getMappings, setPreviewResults, getPreviewResults } from '../app';
+import { getSelectedFiles, getMappings, setPreviewResults, getPreviewResults, setSelectedFiles } from '../app';
 import type { DocumentInfo, LinkInfo } from '../../shared/types';
 import { createProgressBar } from '../components/progress';
 
@@ -97,11 +97,15 @@ export async function init(container: HTMLElement) {
 
   const groupsEl = contentEl.querySelector('#preview-groups') as HTMLElement;
 
+  // Track which files are included for execution
+  const includedFiles = new Set(files);
+
   for (const doc of results) {
     const docId = `doc-${Math.random().toString(36).slice(2, 8)}`;
     const groupHtml = `
-      <div class="doc-group-header" style="cursor:pointer;" data-toggle="${docId}">
-        ${basename(doc.name)} (${doc.links.length} links)
+      <div class="doc-group-header" style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" checked class="doc-include-cb" data-doc-path="${escapeAttr(doc.path)}" title="Include this file in execution" style="cursor:pointer;">
+        <span style="cursor:pointer;flex:1;" data-toggle="${docId}">${basename(doc.name)} (${doc.links.length} links)</span>
       </div>
       <div id="${docId}">
         <table class="link-table">
@@ -128,6 +132,21 @@ export async function init(container: HTMLElement) {
       if (el) el.classList.toggle('hidden');
     });
   }
+
+  // File inclusion checkboxes — update selectedFiles when toggled
+  groupsEl.querySelectorAll('.doc-include-cb').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      const input = cb as HTMLInputElement;
+      const docPath = input.dataset.docPath || '';
+      if (input.checked) {
+        includedFiles.add(docPath);
+      } else {
+        includedFiles.delete(docPath);
+      }
+      // Update selectedFiles so Execute stage only processes included files
+      setSelectedFiles(Array.from(includedFiles));
+    });
+  });
 
   // Load thumbnails async
   const thumbEls = contentEl.querySelectorAll('[data-thumb-path]');

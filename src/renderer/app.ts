@@ -2,14 +2,25 @@ import type { Mapping, DocumentInfo, RepathResult, ProgressUpdate } from '../sha
 import type { InddVersionInfo } from '../core/indd-version';
 
 // ---------------------------------------------------------------------------
-// Global error handlers (Sentry main process captures renderer errors too,
-// but these ensure nothing slips through silently)
+// Global error handlers — report to ErrorDump via main process IPC
 // ---------------------------------------------------------------------------
 window.addEventListener('error', (event) => {
   console.error('Unhandled error:', event.error);
+  window.api.reportError({
+    error_message: event.error?.message ?? String(event.error),
+    stack_trace: event.error?.stack,
+    function_name: 'renderer:windowError',
+  });
 });
 window.addEventListener('unhandledrejection', (event) => {
   console.error('Unhandled rejection:', event.reason);
+  const msg = event.reason instanceof Error ? event.reason.message : String(event.reason);
+  const stack = event.reason instanceof Error ? event.reason.stack : undefined;
+  window.api.reportError({
+    error_message: msg,
+    stack_trace: stack,
+    function_name: 'renderer:unhandledRejection',
+  });
 });
 import { init as initSelectFiles } from './stages/select-files';
 import { init as initDiscover } from './stages/discover';
@@ -40,7 +51,7 @@ declare global {
         totalScanned: number;
       }>;
       previewRepath: (filePaths: string[], mappings: Mapping[]) => Promise<DocumentInfo[]>;
-      executeRepath: (filePaths: string[], mappings: Mapping[]) => Promise<RepathResult[]>;
+      executeRepath: (filePaths: string[], mappings: Mapping[], fileVersions?: Record<string, { version: string } | null>) => Promise<RepathResult[]>;
       loadMappings: () => Promise<Mapping[]>;
       saveMappings: (mappings: Mapping[]) => Promise<void>;
       loadSearchRoots: () => Promise<string[]>;
@@ -52,6 +63,7 @@ declare global {
       detectFileVersions: (filePaths: string[]) => Promise<{ data: Record<string, InddVersionInfo | null> }>;
       getAppVersion: () => Promise<string>;
       getThumbnail: (filePath: string) => Promise<string | null>;
+      reportError: (opts: { error_message: string; stack_trace?: string; function_name?: string; context?: Record<string, unknown> }) => Promise<void>;
     };
   }
 }

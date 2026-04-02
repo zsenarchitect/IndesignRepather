@@ -12,10 +12,10 @@ let cachedBrokenLinks: { name: string; filePath: string }[] = [];
 export function init(container: HTMLElement) {
   container.innerHTML = `
     <h2>Discover Mappings</h2>
-    <p>Scan folders to auto-discover where broken links should point. This stage is optional.</p>
+    <p>Auto-discover where broken links should point. Optional — skip if you already know the path changes.</p>
 
     <div class="broken-link-section">
-      <h3 style="font-size:14px;margin-bottom:8px;">Broken Link Analysis</h3>
+      <h3 style="font-size:14px;margin-bottom:8px;">Step A: Find Broken Links</h3>
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
         <button id="btn-analyze">Scan Selected Files</button>
         <span id="analyze-status" style="font-size:13px;color:#888;"></span>
@@ -26,7 +26,7 @@ export function init(container: HTMLElement) {
     </div>
 
     <div style="margin:12px 0;">
-      <h3 style="font-size:14px;margin-bottom:8px;">Search Roots</h3>
+      <h3 style="font-size:14px;margin-bottom:8px;">Step B: Where to Search for New Locations</h3>
       <div id="search-roots-list" style="margin-bottom:8px;"></div>
       <button id="btn-add-root" style="font-size:12px;">Add Folder</button>
     </div>

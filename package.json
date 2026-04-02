@@ -21,7 +21,6 @@
     "vite": "^6.4.1"
   },
   "dependencies": {
-    "@sentry/electron": "^5.12.0",
     "electron-store": "^8.2.0",
     "electron-updater": "^6.8.3"
   }
